@@ -1,0 +1,1734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAYALw4wDdp5A0m1y5va9NXqJM2RCtkj-M",
+    authDomain: "obv-transport.firebaseapp.com",
+    projectId: "obv-transport",
+    storageBucket: "obv-transport.firebasestorage.app",
+    messagingSenderId: "708155568116",
+    appId: "1:708155568116:web:301012bf45aacf611b53a1"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const DOC_REF = doc(db, 'obv-transport', 'appdata');
+
+  window.firebaseSave = async function(data) {
+    try {
+      await setDoc(DOC_REF, { payload: JSON.stringify(data), savedAt: new Date().toISOString() });
+      return true;
+    } catch(e) { console.error('Firebase save error:', e); return false; }
+  };
+
+  window.firebaseLoad = async function() {
+    try {
+      const snap = await getDoc(DOC_REF);
+      if (snap.exists()) return JSON.parse(snap.data().payload);
+      return null;
+    } catch(e) { console.error('Firebase load error:', e); return null; }
+  };
+
+  window.firebaseListen = function(callback) {
+    let firstSnapshot = true;
+    return onSnapshot(DOC_REF, (snap) => {
+      if (firstSnapshot) { firstSnapshot = false; return; }
+      if (snap.exists()) {
+        try { callback(JSON.parse(snap.data().payload)); } catch(e) {}
+      }
+    });
+  };
+
+  window.firebaseReady = true;
+  document.dispatchEvent(new Event('firebase-ready'));
+</script>
+
+<title>OBV Transport</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
+<style>
+/* ═══════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════ */
+:root{
+  --bg:#f0eeea; --sf:#fff; --sf2:#f6f4f0; --bd:#dedad2; --bd2:#c5c0b5;
+  --tx:#18170f; --tx2:#55524a; --tx3:#98938b;
+  --navy:#0c1c2e; --navy2:#1c3a58;
+  --gold:#c49a28; --goldl:#fdf5e3; --goldd:#8a6b18;
+  --red:#a82828; --redl:#fdf0f0;
+  --grn:#246b36; --grnl:#eef8f1;
+  --warn:#7a5410; --warnl:#fdf7ea;
+  --wh-dark:#1a4228; --wh-mid:#2a6a40; --wh-l:#e8f4ec;
+  --tr-dark:#0c1c2e; --tr-mid:#1c3a58; --tr-l:#e4eaf2;
+  --PT:#2a5fa8; --PTl:#e8f0fb;
+  --AVLX:#7a30a0; --AVLXl:#f2e8fb;
+  --Costume:#2a8a5a; --Costumel:#e8f8f0;
+  --KG:#c06020; --KGl:#fdf0e5;
+  --FOH:#a82a50; --FOHl:#fce8ee;
+  --r:7px; --rl:12px;
+  --sh:0 1px 4px rgba(0,0,0,.09); --shm:0 5px 20px rgba(0,0,0,.14);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--tx);font-family:'Georgia',serif;overflow-x:hidden}
+input,select,button,textarea{font-family:inherit}
+.screen{display:none;min-height:100vh;flex-direction:column}
+.screen.active{display:flex}
+
+/* ═══════════════════════════════════
+   HOME SCREEN — THEATRICAL WARM
+═══════════════════════════════════ */
+#sh{background:var(--navy);min-height:100vh;position:relative;overflow:hidden}
+
+/* Spotlight SVG background */
+.home-spotlights{position:absolute;inset:0;pointer-events:none;z-index:0}
+
+/* Gold rule */
+@keyframes lineGrow{from{width:0}to{width:140px}}
+.gold-line{height:2px;background:linear-gradient(90deg,transparent,var(--gold),var(--gold),transparent);animation:lineGrow 1s ease-out forwards;margin:.7rem auto}
+
+/* Wordmark */
+.obv-home-mark{text-align:center;padding:2.75rem 2rem 1.5rem;position:relative;z-index:1}
+.obv-big{font-size:clamp(4.5rem,14vw,8rem);font-weight:900;font-style:italic;color:#fff;letter-spacing:-.04em;line-height:.86;display:block;text-shadow:0 2px 60px rgba(196,154,40,.22),0 0 120px rgba(0,0,0,.5)}
+.obv-sub-word{font-size:clamp(.65rem,2.5vw,.95rem);letter-spacing:.35em;text-transform:uppercase;color:var(--gold);display:block;margin-top:.6rem;font-style:normal;font-weight:normal}
+.obv-tagline{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.28);margin-top:.35rem;display:block}
+
+/* Module tiles */
+.home-modules{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem;padding:.25rem 1.5rem 2.5rem;position:relative;z-index:1;max-width:800px;margin:0 auto;width:100%}
+.mod-tile{border-radius:var(--rl);padding:1.85rem 1.5rem 1.6rem;cursor:pointer;transition:all .22s cubic-bezier(.2,.8,.4,1);border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:.8rem;position:relative;overflow:hidden}
+/* Dot texture */
+.mod-tile::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,rgba(255,255,255,.04) 1px,transparent 1px);background-size:16px 16px;pointer-events:none;border-radius:var(--rl)}
+/* Gold bottom bar on hover */
+.mod-tile::after{content:'';position:absolute;bottom:0;left:10%;right:10%;height:2px;background:var(--gold);transform:scaleX(0);transform-origin:center;transition:transform .25s ease-out;border-radius:2px 2px 0 0}
+.mod-tile:hover::after{transform:scaleX(1)}
+.mod-tile:hover{transform:translateY(-6px);box-shadow:0 18px 55px rgba(0,0,0,.5)}
+.mod-tile.transport{background:linear-gradient(145deg,#1e4570 0%,#0c1d2e 100%);border-color:rgba(100,160,220,.12)}
+.mod-tile.transport:hover{background:linear-gradient(145deg,#245580 0%,#0e2338 100%)}
+.mod-tile.warehouse{background:linear-gradient(145deg,#1e5832 0%,#0c1d10 100%);border-color:rgba(80,180,100,.1)}
+.mod-tile.warehouse:hover{background:linear-gradient(145deg,#256a3c 0%,#0e2212 100%)}
+.mod-tile .tile-icon{font-size:2.5rem;line-height:1;filter:drop-shadow(0 3px 12px rgba(0,0,0,.5))}
+.mod-tile h2{font-size:1.08rem;color:#fff;letter-spacing:.06em;text-transform:uppercase;font-weight:bold}
+.mod-tile p{font-size:.7rem;color:rgba(255,255,255,.45);line-height:1.6}
+.mod-tile .tile-stats{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.3rem}
+.tile-tag{font-size:.6rem;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,.09);color:rgba(255,255,255,.68);border:1px solid rgba(255,255,255,.08)}
+.tile-tag.warn{background:rgba(196,154,40,.18);color:#e8c568;border-color:rgba(196,154,40,.28)}
+.tile-tag.red{background:rgba(168,40,40,.2);color:#f09090;border-color:rgba(168,40,40,.28)}
+.mod-tile .tile-arrow{position:absolute;right:1.1rem;bottom:1.1rem;font-size:.95rem;color:rgba(255,255,255,.16);transition:all .22s}
+.mod-tile:hover .tile-arrow{color:var(--gold);transform:translateX(5px)}
+
+/* Footer */
+.home-footer{text-align:center;padding:.85rem;color:rgba(255,255,255,.16);font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;position:relative;z-index:1}
+
+/* ═══════════════════════════════════
+   TRANSPORT PRODUCTIONS SCREEN
+═══════════════════════════════════ */
+#str{background:var(--navy)}
+.subhdr{background:var(--navy);color:white;padding:0 1.1rem;display:flex;align-items:center;height:50px;gap:10px;position:sticky;top:0;z-index:100;box-shadow:var(--shm);flex-shrink:0}
+.subhdr-mark{display:flex;align-items:baseline;gap:.15rem;flex-shrink:0}
+.subhdr-mark .ml{font-size:1rem;font-weight:900;font-style:italic;color:white;letter-spacing:-.02em}
+.subhdr-mark .ms{font-size:.55rem;font-weight:900;font-style:italic;color:rgba(255,255,255,.4);margin-left:.1rem;letter-spacing:.02em}
+.subhdr-divider{width:1px;height:20px;background:rgba(255,255,255,.15);flex-shrink:0}
+.subhdr h2{font-size:.82rem;font-weight:normal;color:rgba(255,255,255,.7);flex:1;letter-spacing:.04em;text-transform:uppercase}
+.bb{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:white;padding:4px 10px;border-radius:var(--r);font-size:.73rem;cursor:pointer;white-space:nowrap;transition:background .15s}
+.bb:hover{background:rgba(255,255,255,.2)}
+.bb.gold{background:rgba(196,154,40,.2);border-color:rgba(196,154,40,.4);color:var(--gold)}
+.bb.gold:hover{background:rgba(196,154,40,.3)}
+.subhdr-body{background:var(--bg);flex:1;overflow-y:auto}
+
+.prod-list-wrap{padding:1.25rem 1.5rem;max-width:860px;margin:0 auto}
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;padding-bottom:.5rem;border-bottom:2px solid var(--navy2)}
+.section-hdr h3{font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--navy2);font-weight:bold}
+.prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:.75rem;margin-bottom:1.5rem}
+.pc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:.9rem 1rem;cursor:pointer;transition:all .18s;box-shadow:var(--sh);position:relative}
+.pc:hover{border-color:var(--navy2);box-shadow:var(--shm);transform:translateY(-2px)}
+.pc h3{font-size:.88rem;color:var(--navy2);margin-bottom:.2rem}
+.pc .meta{font-size:.68rem;color:var(--tx3);margin-bottom:.55rem}
+.pc .tags{display:flex;gap:4px;flex-wrap:wrap}
+.ptag{font-size:.6rem;padding:2px 7px;border-radius:20px;background:var(--tr-l);color:var(--tr-mid)}
+.pca{display:flex;gap:5px;margin-top:.6rem;padding-top:.55rem;border-top:1px solid var(--bd)}
+.npc{border:2px dashed var(--bd2);background:transparent;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--tx3);font-size:.82rem;min-height:85px;border-radius:var(--rl);cursor:pointer;transition:all .15s}
+.npc:hover{border-color:var(--navy2);color:var(--navy2);background:var(--tr-l)}
+
+/* ═══════════════════════════════════
+   MODAL
+═══════════════════════════════════ */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;display:none;align-items:center;justify-content:center;padding:1rem}
+.ov.open{display:flex}
+.mo{background:var(--sf);border-radius:var(--rl);padding:1.4rem;width:100%;max-width:480px;box-shadow:var(--shm);max-height:90vh;overflow-y:auto}
+.mo h2{font-size:.95rem;margin-bottom:.9rem;color:var(--navy2)}
+.moa{display:flex;gap:7px;justify-content:flex-end;margin-top:.9rem}
+
+/* ═══════════════════════════════════
+   PLANNER HEADER (transport detail)
+═══════════════════════════════════ */
+.ah{background:var(--tr-dark);color:white;padding:0 1rem;display:flex;align-items:center;height:50px;gap:10px;position:sticky;top:0;z-index:100;box-shadow:var(--shm);flex-shrink:0}
+.ah.wh-hd{background:var(--wh-dark)}
+.ah-title{flex:1;display:flex;align-items:center;gap:10px;overflow:hidden;min-width:0}
+.prod-chip{font-size:.78rem;color:rgba(255,255,255,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tabs{display:flex;background:rgba(0,0,0,.25);padding:0 1rem;gap:0;flex-shrink:0;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{background:none;border:none;color:rgba(255,255,255,.48);padding:8px 12px;font-size:.7rem;cursor:pointer;border-bottom:2px solid transparent;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;transition:color .15s}
+.tab:hover{color:rgba(255,255,255,.82)}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.panel{display:none;padding:.9rem 1rem;flex:1;overflow-y:auto}
+.panel.active{display:block}
+
+/* ═══════════════════════════════════
+   SHARED COMPONENTS
+═══════════════════════════════════ */
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:.9rem;box-shadow:var(--sh)}
+.card+.card{margin-top:.7rem}
+.ct{font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--tx3);margin-bottom:.75rem}
+.fg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:7px}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fg label{font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3)}
+.fg input,.fg select,.fg textarea{border:1px solid var(--bd);border-radius:var(--r);padding:5px 8px;font-size:.81rem;background:var(--sf);color:var(--tx);transition:border-color .15s}
+.fg input:focus,.fg select:focus{outline:none;border-color:var(--navy2)}
+.s2{grid-column:span 2}.s3{grid-column:span 3}
+
+.btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:var(--r);border:1px solid var(--bd2);background:var(--sf);color:var(--tx);font-size:.75rem;cursor:pointer;white-space:nowrap;transition:all .15s;line-height:1.4}
+.btn:hover{background:var(--sf2);border-color:var(--navy2)}
+.btn.pri{background:var(--navy2);color:white;border-color:var(--navy2)}.btn.pri:hover{background:#254e78}
+.btn.wh{background:var(--wh-dark);color:white;border-color:var(--wh-dark)}.btn.wh:hover{background:#255030}
+.btn.gld{background:var(--gold);color:white;border-color:var(--gold)}.btn.gld:hover{background:var(--goldd)}
+.btn.red{background:var(--redl);color:var(--red);border-color:#eec5c5}
+.btn.grn{background:var(--grnl);color:var(--grn);border-color:#b5dcc0}
+.btn.sm{padding:3px 8px;font-size:.7rem}
+.btn svg{width:13px;height:13px;flex-shrink:0}
+
+.tw{overflow-x:auto;border-radius:var(--r);border:1px solid var(--bd)}
+table{width:100%;border-collapse:collapse;font-size:.76rem}
+thead th{background:var(--sf2);padding:6px 8px;text-align:left;font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);font-weight:normal;border-bottom:1px solid var(--bd);white-space:nowrap}
+tbody tr{border-bottom:1px solid var(--bd);transition:background .1s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:var(--sf2)}
+tbody td{padding:5px 8px;vertical-align:middle}
+tbody td input,tbody td select{border:1px solid transparent;background:transparent;padding:2px 4px;border-radius:4px;font-size:.76rem;color:var(--tx);width:100%}
+tbody td input:focus,tbody td select:focus{border-color:var(--navy2);background:white;outline:none}
+
+.db{display:inline-block;padding:2px 7px;border-radius:20px;font-size:.61rem;font-weight:bold;letter-spacing:.04em;text-transform:uppercase}
+.d-PT{background:var(--PTl);color:var(--PT)}.d-AVLX{background:var(--AVLXl);color:var(--AVLX)}
+.d-Costume{background:var(--Costumel);color:var(--Costume)}.d-KG{background:var(--KGl);color:var(--KG)}.d-FOH{background:var(--FOHl);color:var(--FOH)}
+.pb{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:.63rem;font-weight:bold}
+.p1{background:var(--red);color:white}.p2{background:var(--gold);color:white}.p3{background:#8a9aaa;color:white}
+
+.sb{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.85rem}
+.st{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:7px 12px;flex:1;min-width:78px}
+.sn{font-size:1.2rem;font-weight:bold;color:var(--navy2);line-height:1}
+.sn.gc{color:var(--grn)}.sn.rc{color:var(--red)}.sn.wc{color:var(--warn)}.sn.gc2{color:var(--wh-mid)}
+.sl{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);margin-top:2px}
+
+.al{padding:8px 11px;border-radius:var(--r);font-size:.75rem;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:7px}
+.al.info{background:var(--tr-l);color:var(--navy2);border:1px solid #bbd0e8}
+.al.wh{background:var(--wh-l);color:var(--wh-dark);border:1px solid #b0d4bc}
+.al.warn{background:var(--warnl);color:var(--warn);border:1px solid #e0c88a}
+.al svg{width:13px;height:13px;flex-shrink:0;margin-top:1px}
+.tb{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:.7rem}
+.sp{flex:1}
+.es{text-align:center;padding:2.5rem;color:var(--tx3);font-size:.83rem}
+input[type="file"]{display:none}
+
+/* photo */
+.phl{display:inline-flex;align-items:center;gap:4px;font-size:.7rem;padding:2px 7px;border-radius:20px;background:var(--tr-l);color:var(--navy2);border:1px solid var(--bd);cursor:pointer;text-decoration:none;white-space:nowrap;vertical-align:middle;transition:background .15s}
+.phl:hover{background:var(--bd);color:var(--navy2)}
+.phl-empty{display:inline-flex;align-items:center;justify-content:center;width:28px;height:22px;border-radius:4px;border:1px dashed var(--bd2);cursor:pointer;color:var(--tx3);font-size:.78rem;vertical-align:middle;transition:border-color .15s}
+.phl-empty:hover{border-color:var(--navy2);color:var(--navy2)}
+
+/* lightbox */
+#lb{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:700;display:none;align-items:center;justify-content:center;padding:1rem;flex-direction:column;gap:.85rem}
+
+#lb img{max-width:88vw;max-height:68vh;border-radius:var(--rl);object-fit:contain;box-shadow:0 8px 40px rgba(0,0,0,.7)}
+#lb .lbd{background:rgba(255,255,255,.07);border-radius:var(--rl);padding:.85rem 1.25rem;color:white;max-width:480px;width:100%}
+#lb .lbd h3{font-size:.92rem;margin-bottom:.35rem;color:var(--gold)}
+#lb .lbd p{font-size:.75rem;line-height:1.7;opacity:.8}
+#lb .lbc{position:absolute;top:.85rem;right:.85rem;background:rgba(255,255,255,.1);border:none;color:white;width:34px;height:34px;border-radius:50%;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#lb .lbc:hover{background:rgba(255,255,255,.2)}
+
+/* tooltip */
+#tt{position:fixed;background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:.6rem;box-shadow:var(--shm);z-index:400;max-width:192px;pointer-events:none;display:none}
+#tt img{width:100%;border-radius:var(--r);margin-bottom:.35rem;object-fit:cover;max-height:100px}
+#tt .ttn{font-size:.8rem;font-weight:bold;color:var(--navy2);margin-bottom:.15rem}
+#tt .ttd{font-size:.67rem;color:var(--tx2);line-height:1.6}
+
+/* canvas */
+.tvc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:.85rem;box-shadow:var(--sh)}
+.tvc+.tvc{margin-top:.85rem}
+.tvc h3{font-size:.83rem;color:var(--navy2);margin-bottom:.2rem}
+.tcm{font-size:.67rem;color:var(--tx3);margin-bottom:.55rem;display:flex;gap:10px;flex-wrap:wrap}
+canvas.tc{display:block;width:100%;border:1px solid var(--bd);border-radius:var(--r);background:#f9f8f4}
+.spb{margin-top:.5rem}
+.spbl{display:flex;justify-content:space-between;font-size:.63rem;color:var(--tx3);margin-bottom:2px}
+.spbr{height:5px;background:var(--bd);border-radius:3px;overflow:hidden}
+.spbf{height:100%;border-radius:3px;transition:width .3s}
+
+/* QR */
+.qg{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:.7rem}
+.qc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:.75rem;text-align:center;box-shadow:var(--sh)}
+.qc h4{font-size:.73rem;color:var(--navy2);margin-bottom:.15rem}
+.qc p{font-size:.63rem;color:var(--tx3);margin-bottom:.5rem}
+.qcw{display:flex;justify-content:center;margin-bottom:.5rem}
+.qcw canvas,.qcw img{max-width:100px!important;height:auto!important}
+
+/* ═══════════════════════════════════
+   WAREHOUSE STOCK
+═══════════════════════════════════ */
+.wi{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:.85rem;box-shadow:var(--sh)}
+.wi+.wi{margin-top:.6rem}
+.wi-hdr{display:flex;align-items:flex-start;gap:9px;margin-bottom:.45rem}
+.wi-title{flex:1;min-width:0}
+.wi-title h4{font-size:.85rem;display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:.15rem}
+.wi-meta{font-size:.68rem;color:var(--tx3);line-height:1.6}
+.wi-bar{height:5px;background:var(--bd);border-radius:3px;overflow:hidden;margin:.45rem 0}
+.wi-bar-fill{height:100%;border-radius:3px;transition:width .35s}
+.wi-actions{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.wi-log{max-height:80px;overflow-y:auto;border-top:1px solid var(--bd);padding-top:.35rem;margin-top:.35rem}
+.wle{font-size:.64rem;display:flex;gap:5px;padding:2px 0;border-bottom:1px solid var(--bd);color:var(--tx2)}
+.wle:last-child{border-bottom:none}
+.lin{color:var(--grn);font-weight:bold}.lout{color:var(--red);font-weight:bold}
+.wst-ok{color:var(--grn)}.wst-w{color:var(--warn)}.wst-r{color:var(--red)}
+
+/* wh stock badge shown in transport */
+.wh-badge{display:inline-flex;align-items:center;gap:4px;font-size:.63rem;padding:2px 7px;border-radius:20px;background:var(--wh-l);color:var(--wh-dark);border:1px solid #b8dcc4;white-space:nowrap}
+.wh-badge.low{background:var(--warnl);color:var(--warn);border-color:#e0c88a}
+.wh-badge.out{background:var(--redl);color:var(--red);border-color:#eec5c5}
+
+/* location tabs */
+.loc-tabs{display:flex;gap:0;overflow-x:auto;scrollbar-width:none;border-bottom:2px solid var(--bd);margin-bottom:.85rem}
+.loc-tabs::-webkit-scrollbar{display:none}
+.loc-tab{background:none;border:none;color:var(--tx3);padding:7px 14px;font-size:.72rem;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;letter-spacing:.03em;transition:color .15s;font-family:inherit}
+.loc-tab:hover{color:var(--navy2)}
+.loc-tab.active{color:var(--wh-dark);border-bottom-color:var(--wh-dark);font-weight:bold}
+
+/* ═══════════════════════════════════
+   SCANNER
+═══════════════════════════════════ */
+#ss{background:#0a0a0a;color:white}
+.sc-hd{background:#1c3a58;padding:.75rem 1rem;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.sc-hd h2{font-size:.9rem;font-weight:normal;flex:1}
+#sv{width:100%;max-width:400px;border-radius:var(--r);margin:.7rem auto .35rem;display:block}
+.sr{background:#141414;border-radius:var(--rl);padding:.95rem;margin:0 .75rem .75rem;max-width:400px;align-self:center;width:calc(100% - 1.5rem)}
+.sr h3{color:var(--gold);margin-bottom:.5rem;font-size:.9rem}
+.sd{font-size:.76rem;color:#ccc;line-height:1.8;margin-bottom:.75rem}
+.sa{display:flex;gap:5px;flex-wrap:wrap}
+.sab{padding:9px 12px;border-radius:var(--r);border:none;font-size:.8rem;cursor:pointer;font-family:inherit;flex:1;min-width:85px}
+.sab.sin{background:var(--grn);color:white}.sab.sout{background:var(--red);color:white}
+.sab.sadd{background:var(--gold);color:white}.sab.smore{background:#333;color:#ddd}
+.sst{color:#666;font-size:.78rem;text-align:center;padding:.7rem}
+.slg{margin:0 .75rem;max-width:400px;align-self:center;width:calc(100% - 1.5rem)}
+.slg h4{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#555;margin-bottom:.35rem}
+.sle{font-size:.72rem;color:#bbb;padding:3px 0;border-bottom:1px solid #1a1a1a;display:flex;gap:7px}
+
+/* ═══════════════════════════════════
+   PRINT
+═══════════════════════════════════ */
+@media print{body *{visibility:hidden}#print-area,#print-area *{visibility:visible}#print-area{position:fixed;inset:0;background:white;z-index:9999}}
+#print-area{display:none}
+.label-sheet{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm;padding:8mm;background:white}
+.label{border:1px solid #ccc;border-radius:3mm;padding:3.5mm;display:flex;flex-direction:column;align-items:center;gap:1.5mm;break-inside:avoid;page-break-inside:avoid}
+.label .ln{font-size:7.5pt;font-weight:bold;color:#1c3a58;text-align:center;line-height:1.3}
+.label .lm{font-size:6pt;color:#666;text-align:center;line-height:1.4}
+.label .lcat{font-size:5.5pt;padding:1mm 2.5mm;border-radius:10mm;font-weight:bold;letter-spacing:.04em;text-transform:uppercase}
+.label-hdr{font-size:8pt;color:#888;padding:5mm 8mm 2mm;display:flex;justify-content:space-between;border-bottom:1px solid #eee;margin-bottom:2mm}
+.label-hdr strong{color:#0c1c2e}
+
+/* ═══════════════════════════════════
+   FLEET TAB — split layout
+═══════════════════════════════════ */
+.fleet-truck-row{display:grid;grid-template-columns:260px 1fr;gap:1rem;margin-bottom:1.25rem;border:1px solid var(--bd);border-radius:var(--rl);background:var(--sf);box-shadow:var(--sh);overflow:hidden}
+.fleet-left{padding:.9rem;border-right:1px solid var(--bd);min-width:0;order:2}
+.fleet-right{padding:.9rem;min-width:0;display:flex;flex-direction:column;gap:.5rem;order:1}
+.fleet-truck-name{font-size:.92rem;font-weight:bold;color:var(--navy2);margin-bottom:.1rem}
+.fleet-truck-meta{font-size:.63rem;color:var(--tx3);margin-bottom:.55rem}
+.fleet-canvas-wrap{background:#f9f8f4;border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;position:relative;cursor:grab}
+.fleet-canvas-wrap canvas{display:block;width:100%;height:auto}
+.fleet-item-row{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:var(--r);border:1px solid var(--bd);background:var(--sf2);font-size:.78rem;transition:background .1s}
+.fleet-item-row:hover{background:var(--sf)}
+.fleet-item-row .fi-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fleet-item-row .fi-detail{font-size:.65rem;color:var(--tx3);white-space:nowrap}
+.fleet-dept-section{margin-bottom:.4rem}
+.fleet-dept-label{font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;padding:2px 0;border-bottom:1px solid var(--bd);margin-bottom:4px}
+.fleet-item-tooltip{display:none;position:absolute;z-index:300;background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:.55rem .75rem;box-shadow:var(--shm);max-width:200px;font-size:.72rem;pointer-events:none}
+
+/* Add truck modal */
+.at-modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:.85rem}
+
+/* ═══════════════════════════════════
+   WAREHOUSE — simplified cards
+═══════════════════════════════════ */
+.wi{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:.65rem .85rem;box-shadow:var(--sh);transition:box-shadow .15s}
+.wi+.wi{margin-top:.5rem}
+.wi:hover{box-shadow:var(--shm)}
+.wi-main{display:flex;align-items:center;gap:9px}
+.wi-status-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.wi-name{flex:1;font-size:.84rem;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wi-qty-badge{font-size:.78rem;font-weight:bold;color:var(--navy2);white-space:nowrap}
+.wi-actions-inline{display:flex;gap:5px;align-items:center;flex-shrink:0}
+.wi-expand{display:none;padding:.55rem 0 .25rem;border-top:1px solid var(--bd);margin-top:.55rem}
+.wi.expanded .wi-expand{display:block}
+.wi-bar{height:4px;background:var(--bd);border-radius:3px;overflow:hidden;margin:.45rem 0 .55rem}
+.wi-bar-fill{height:100%;border-radius:3px;transition:width .35s}
+.wi-meta-row{display:flex;flex-wrap:wrap;gap:.4rem .9rem;font-size:.68rem;color:var(--tx3);margin-bottom:.5rem}
+.wi-meta-row strong{color:var(--tx2)}
+.wi-edit-row{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.wi-log{max-height:60px;overflow-y:auto;border-top:1px solid var(--bd);padding-top:.3rem;margin-top:.3rem}
+
+@media(max-width:580px){
+  /* ═══ HOME ═══ */
+  .home-modules{grid-template-columns:1fr;gap:.75rem;padding:1rem}
+  .obv-big{font-size:3.5rem}
+
+  /* ═══ FLEET — stack vertically on mobile ═══ */
+  .fleet-truck-row{grid-template-columns:1fr;grid-template-rows:auto auto}
+  .fleet-right{order:1;border-bottom:1px solid var(--bd)}
+  .fleet-left{order:2;border-right:none}
+
+  /* ═══ FORM GRIDS — prevent overflow ═══ */
+  .fg-grid{grid-template-columns:1fr 1fr}
+  .s2,.s3{grid-column:span 2}
+  .qg{grid-template-columns:1fr 1fr}
+  .prod-grid{grid-template-columns:1fr}
+
+  /* ═══ ITEM TABLE — compact on mobile ═══ */
+  .tw{font-size:.72rem}
+  thead th,tbody td{padding:4px 5px}
+  /* Hide less-critical cols on mobile */
+  .tw .col-photo,.tw .col-dims,.tw .col-wh,.tw .col-notes,.tw .col-qr{display:none}
+
+  /* ═══ HEADER BUTTONS — slim ═══ */
+  .subhdr,.ah{gap:6px;padding:0 .65rem}
+  .bb{padding:3px 7px;font-size:.68rem}
+
+  /* ═══ STAT BAR — 2 per row ═══ */
+  .sb{flex-wrap:wrap}
+  .st{min-width:calc(50% - .3rem)}
+
+  /* ═══ ADD ITEM FORM — full-width fields ═══ */
+  #sp .fg-grid{grid-template-columns:1fr 1fr}
+  #sp .fg.s2{grid-column:span 2}
+  #sp .fg input,#sp .fg select{width:100%!important;box-sizing:border-box}
+  .tb{flex-wrap:wrap;gap:5px}
+  .tb input[type=text]{width:100%!important;flex:1 1 100%}
+  .tb select{flex:1 1 calc(50% - 3px)}
+
+  /* ═══ WAREHOUSE ═══ */
+  .loc-tabs{padding-bottom:2px}
+  .wi-name{font-size:.8rem}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════
+     TRANSPORT — PRODUCTIONS LIST
+═══════════════════════════════════ -->
+<!-- PASSWORD SCREEN -->
+<div id="pw-screen" style="position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:1.5rem">
+  <div style="text-align:center">
+    <div style="font-size:3rem;font-weight:900;font-style:italic;color:white;letter-spacing:-.04em;text-shadow:0 2px 40px rgba(196,154,40,.3)">OBV</div>
+    <div style="height:2px;width:80px;background:linear-gradient(90deg,transparent,var(--gold),transparent);margin:.5rem auto"></div>
+    <div style="font-size:.6rem;letter-spacing:.3em;text-transform:uppercase;color:var(--gold);margin-bottom:.25rem">Transport</div>
+    <div style="font-size:.55rem;letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.3)">Opera Ballet Vlaanderen</div>
+  </div>
+  <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:var(--rl);padding:1.75rem 2rem;width:100%;max-width:340px;display:flex;flex-direction:column;gap:.85rem">
+    <div style="font-size:.75rem;color:rgba(255,255,255,.6);text-align:center;letter-spacing:.05em">Voer het wachtwoord in</div>
+    <input id="pw-input" type="password" placeholder="Wachtwoord"
+      style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:var(--r);padding:10px 14px;font-size:.95rem;color:white;outline:none;font-family:Georgia,serif;transition:border-color .2s"
+      onkeydown="if(event.key==='Enter')checkPw()"
+      autocomplete="current-password">
+    <button onclick="checkPw()" style="background:var(--gold);border:none;border-radius:var(--r);padding:10px;font-size:.85rem;color:white;cursor:pointer;font-family:Georgia,serif;font-weight:bold;letter-spacing:.05em" onmouseover="this.style.background='var(--goldd)'" onmouseout="this.style.background='var(--gold)'">Aanmelden</button>
+    <div id="pw-error" style="font-size:.72rem;color:#f09090;text-align:center;min-height:1rem"></div>
+  </div>
+</div>
+
+<div class="screen active" id="str">
+  <div class="subhdr">
+    <div class="subhdr-mark"><span class="ml">OBV</span><span class="ms">TRANSPORT</span></div>
+    <div class="subhdr-divider"></div>
+    <h2>Productions</h2>
+    <button class="bb gold" onclick="openNPM()">+ New</button>
+    <button class="bb" onclick="document.getElementById('imp-pf').click()">↑ Import</button>
+    <input type="file" id="imp-pf" accept=".json" onchange="importProject(event)">
+  </div>
+  <div class="subhdr-body">
+    <div style="display:flex;align-items:center;gap:1rem;padding:2rem 1.5rem 1rem;max-width:860px;margin:0 auto;width:100%">
+      <span style="font-size:2.5rem;font-weight:900;font-style:italic;color:white;letter-spacing:-.03em;line-height:1;text-shadow:0 2px 30px rgba(196,154,40,.25)">OBV</span>
+      <div style="width:2px;height:36px;background:linear-gradient(to bottom,transparent,var(--gold),transparent);flex-shrink:0"></div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:.6rem;letter-spacing:.28em;text-transform:uppercase;color:var(--gold);font-weight:normal">Transport</span>
+        <span style="font-size:.55rem;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.3)">Opera Ballet Vlaanderen</span>
+      </div>
+    </div>
+    <div class="prod-list-wrap">
+      <div class="section-hdr" style="margin-top:.25rem">
+        <h3>All Productions</h3>
+        <span style="font-size:.68rem;color:var(--tx3)" id="prod-count-label"></span>
+      </div>
+      <div class="prod-grid" id="pg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- New Production Modal -->
+<div class="ov" id="npm" onclick="if(event.target===this)closeNPM()">
+  <div class="mo">
+    <h2>New Production</h2>
+    <div class="fg-grid" style="margin-bottom:.85rem">
+      <div class="fg s2"><label>Production Name *</label><input id="np-n" type="text" placeholder="e.g. Parcival → Vienna"></div>
+      <div class="fg"><label>Destination</label><input id="np-d" type="text" placeholder="Vienna"></div>
+      <div class="fg"><label>Date</label><input id="np-dt" type="date"></div>
+      <div class="fg s2"><label>Notes</label><input id="np-nt" type="text" placeholder="Optional"></div>
+    </div>
+    <div class="moa"><button class="btn" onclick="closeNPM()">Cancel</button><button class="btn pri" onclick="createProd()">Create Production</button></div>
+  </div>
+</div>
+
+<!-- Scan / duplicate modal -->
+<div class="ov" id="sta-modal" onclick="if(event.target===this)closeSTA()">
+  <div class="mo"><h2 id="sta-title">Action</h2><div id="sta-body" style="font-size:.82rem;color:var(--tx2);line-height:1.7;margin-bottom:.85rem"></div><div class="moa" id="sta-actions"></div></div>
+</div>
+
+<!-- ═══════════════════════════════════
+     TRANSPORT — PLANNER DETAIL
+═══════════════════════════════════ -->
+<div class="screen" id="sp">
+  <header class="ah">
+    <button class="bb" onclick="backToProductions()">← Productions</button>
+    <div class="ah-title">
+      <div class="subhdr-mark"><span class="ml">OBV</span><span class="ms">TRANSPORT</span></div>
+      <span class="prod-chip" id="pd">—</span>
+    </div>
+    <button class="bb" onclick="saveProject()" id="save-btn">Save</button>
+    <span id="save-indicator" style="font-size:.68rem;color:var(--gold);opacity:0;transition:opacity 0.5s;white-space:nowrap"></span>
+    <button class="bb" onclick="exportText()">📄 Driver</button>
+    <button class="bb" onclick="exportExcel()">📊 Excel</button>
+    <button class="bb" onclick="exportProject()">💾 JSON</button>
+  </header>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('items')" id="tab-items">📦 Items</button>
+    <button class="tab" onclick="showTab('fleet')" id="tab-fleet">🚛 Fleet</button>
+    <button class="tab" onclick="showTab('qr')" id="tab-qr">🔲 QR Labels</button>
+  </div>
+
+  <!-- ITEMS -->
+  <div class="panel active" id="panel-items">
+    <div class="sb">
+      <div class="st"><div class="sn" id="s-i">0</div><div class="sl">Items</div></div>
+      <div class="st"><div class="sn" id="s-t">—</div><div class="sl">Trucks</div></div>
+      <div class="st"><div class="sn" id="s-w">0 kg</div><div class="sl">Weight</div></div>
+      <div class="st"><div class="sn" id="s-v">0 m³</div><div class="sl">Volume</div></div>
+    </div>
+    <div class="card" style="margin-bottom:.75rem">
+      <div class="ct">Add New Item</div>
+      <div class="fg-grid">
+        <div class="fg s2"><label>Item Name *</label><input id="fn" type="text" placeholder="e.g. Backdrop Frame A" autocomplete="off"></div>
+        <div class="fg"><label>Qty</label><input id="fq" type="number" min="1" value="1"></div>
+        <div class="fg"><label>Length (cm)</label><input id="fl" type="number" min="0" placeholder="0"></div>
+        <div class="fg"><label>Width (cm)</label><input id="fw" type="number" min="0" placeholder="0"></div>
+        <div class="fg"><label>Height (cm)</label><input id="fh" type="number" min="0" placeholder="0"></div>
+        <div class="fg"><label>Weight (kg)</label><input id="fwt" type="number" min="0" placeholder="0"></div>
+        <div class="fg"><label>Department</label>
+          <select id="fd"><option value="PT">PT</option><option value="AVLX">AVLX</option><option value="Costume">Costume</option><option value="KG">Kap &amp; Grime</option><option value="FOH">Front of House</option></select>
+        </div>
+        <div class="fg"><label>Priority</label>
+          <select id="fp"><option value="1">1 – First truck</option><option value="2" selected>2 – Standard</option><option value="3">3 – Last truck</option></select>
+        </div>
+        <div class="fg s2"><label>Notes</label><input id="fnt" type="text" placeholder="Optional"></div>
+      </div>
+      <div style="margin-top:.75rem;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button class="btn pri" onclick="addItem()">+ Add Item</button>
+        <button class="btn" onclick="clearForm()">Clear</button>
+        <div class="sp"></div>
+        <label class="btn" style="cursor:pointer">↑ Excel/CSV<input type="file" accept=".xlsx,.xls,.csv" onchange="importExcel(event)"></label>
+        <button class="btn gld" onclick="autoAssign()">⚡ Auto-Assign Trucks</button>
+      </div>
+    </div>
+    <div class="tb">
+      <input type="text" id="srch" placeholder="Search…" style="width:155px" oninput="renderTable()">
+      <select id="filt-d" onchange="renderTable()" style="width:135px">
+        <option value="">All departments</option>
+        <option value="PT">PT</option><option value="AVLX">AVLX</option>
+        <option value="Costume">Costume</option><option value="KG">Kap &amp; Grime</option><option value="FOH">Front of House</option>
+      </select>
+      <select id="filt-t" onchange="renderTable()" style="width:115px"><option value="">All trucks</option></select>
+      <div class="sp"></div>
+      <button class="btn sm red" id="btn-ca" onclick="clearAll()" style="display:none">Clear All</button>
+    </div>
+    <div class="tw">
+      <table><thead><tr>
+        <th>📎</th><th>#</th><th>Name</th><th>Qty</th><th>L×W×H</th><th>kg</th>
+        <th>Dept</th><th>P</th><th>Truck</th><th>Warehouse</th><th>Notes</th><th>QR</th><th></th>
+      </tr></thead>
+      <tbody id="itb"></tbody></table>
+    </div>
+    <div class="es" id="em" style="display:none">No items yet. Add above or import an Excel file.</div>
+  </div>
+
+  <!-- FLEET (merged trucks + plan + 2D view) -->
+  <div class="panel" id="panel-fleet">
+    <!-- Toolbar -->
+    <div class="tb" style="margin-bottom:.75rem">
+      <button class="btn sm gld" onclick="autoAssignAndRender()">⚡ Auto-Assign</button>
+      <button class="btn sm" onclick="openAddTruckModal()">+ Add Truck</button>
+      <div class="sp"></div>
+      <span style="font-size:.68rem;color:var(--tx3)">Drag items in 2D view · Hover for details</span>
+      <button class="btn sm" onclick="window.print()">🖨 Print</button>
+    </div>
+    <!-- Legend -->
+    <div id="fleet-dept-leg" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:.85rem"></div>
+    <!-- Per-truck rows -->
+    <div id="fleet-container"></div>
+    <div class="es" id="fleet-empty">No items assigned to trucks yet. Click ⚡ Auto-Assign or assign trucks in the Items tab.</div>
+  </div>
+
+  <!-- Hidden inputs for add-truck modal -->
+  <input type="hidden" id="tn" value=""><input type="hidden" id="tl" value="1360">
+  <input type="hidden" id="tw2" value="247"><input type="hidden" id="th" value="270">
+  <input type="hidden" id="tmw" value="24000"><input type="hidden" id="tnt" value="">
+  <!-- legacy targets kept for JS compat -->
+  <div style="display:none" id="trl"></div>
+  <div style="display:none" id="tre"></div>
+  <div style="display:none" id="pc"></div>
+  <div style="display:none" id="pe"></div>
+  <div style="display:none" id="dept-leg"></div>
+  <div style="display:none" id="cc"></div>
+  <div style="display:none" id="ve"></div>
+  
+
+  <!-- QR -->
+  <div class="panel" id="panel-qr">
+    <div class="tb">
+      <button class="btn pri" onclick="genAllQR()">Generate All QR</button>
+      <button class="btn gld" onclick="printAllLabels()">🖨 Print Labels (A4)</button>
+      <button class="btn" onclick="openScanner()">📷 Scanner</button>
+      <div class="sp"></div>
+      <input type="text" id="qrs" placeholder="Filter…" style="width:155px" oninput="renderQR()">
+    </div>
+    <div class="qg" id="qg"></div>
+    <div class="es" id="qe" style="display:none">No items yet.</div>
+  </div>
+
+  <!-- hidden export preview (used by exportText) -->
+  <pre id="ep" style="display:none"></pre>
+</div>
+
+<!-- Add Truck Modal -->
+<div class="ov" id="add-truck-modal" onclick="if(event.target===this)closeAddTruckModal()">
+  <div class="mo">
+    <h2>Add Truck</h2>
+    <div class="al info" style="margin-bottom:.85rem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Default: EU 13.6m semi-trailer. Auto-assign uses the first truck as template.</div>
+    <div class="at-modal-grid">
+      <div class="fg" style="grid-column:span 2"><label>Name *</label><input id="atm-n" type="text" placeholder="Truck 2"></div>
+      <div class="fg"><label>Length (cm)</label><input id="atm-l" type="number" value="1360"></div>
+      <div class="fg"><label>Width (cm)</label><input id="atm-w" type="number" value="247"></div>
+      <div class="fg"><label>Height (cm)</label><input id="atm-h" type="number" value="270"></div>
+      <div class="fg"><label>Max kg</label><input id="atm-mw" type="number" value="24000"></div>
+      <div class="fg" style="grid-column:span 2"><label>Notes</label><input id="atm-nt" type="text" placeholder="Optional"></div>
+    </div>
+    <div class="moa"><button class="btn" onclick="closeAddTruckModal()">Cancel</button><button class="btn pri" onclick="addTruckFromModal()">Add Truck</button></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SCANNER
+═══════════════════════════════════ -->
+<div class="screen" id="ss">
+  <div class="sc-hd"><button class="bb" onclick="closeScanner()">← Back</button><h2>📷 QR Scanner</h2></div>
+  <video id="sv" autoplay playsinline muted></video>
+  <div id="sst" class="sst">Point camera at a QR code…</div>
+  <div class="sr" id="sr" style="display:none">
+    <h3 id="si-n">—</h3><div class="sd" id="si-d"></div><div class="sa" id="sa"></div>
+  </div>
+  <div class="slg" id="slg-sec" style="display:none"><h4>Recent scans</h4><div id="slg"></div></div>
+</div>
+
+<!-- Lightbox removed — photos now via Drive links -->
+<div id="tt"><img id="tt-img" src="" alt="" style="display:none"><div class="ttn" id="tt-n"></div><div class="ttd" id="tt-d"></div></div>
+<div id="print-area"></div>
+<canvas id="qdc" style="display:none"></canvas>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════
+const DEPTS=['PT','AVLX','Costume','KG','FOH'];
+const DL={PT:'PT',AVLX:'AVLX',Costume:'Costume',KG:'Kap & Grime',FOH:'Front of House'};
+const DC={PT:'#2a5fa8',AVLX:'#7a30a0',Costume:'#2a8a5a',KG:'#c06020',FOH:'#a82a50'};
+const DCL={PT:'#e8f0fb',AVLX:'#f2e8fb',Costume:'#e8f8f0',KG:'#fdf0e5',FOH:'#fce8ee'};
+
+// Default locations
+const DEFAULT_LOCS=[
+  {id:'zele',name:'Zele',note:'Main warehouse'},
+  {id:'westmalle',name:'Westmalle',note:'Main warehouse'},
+  {id:'antwerp',name:'Opera Antwerp',note:''},
+  {id:'ghent',name:'Opera Ghent',note:'Closed — under renovation'},
+  {id:'eilandje',name:"Theater 't Eilandje",note:''},
+  {id:'brugge',name:'Concertgebouw Brugge',note:''},
+];
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let prods=[],curProd=null,items=[],trucks=[],nextId=1,scanLog=[];
+// Warehouse: primary stores are per-location objects keyed by locationId
+// whStores = { locationId: { items:[], nextId:1 } }
+// whItems is always a COMPUTED flat array of all items across all stores
+let whStores={},whLog=[],whLocations=[],whLocFilter='all';
+let visualData={};
+let scanStream=null,scanAF=null,scanCurItem=null;
+
+// Computed flat list of all warehouse items across all stores
+function getAllWHItems(){return Object.entries(whStores).flatMap(([locId,store])=>store.items.map(i=>({...i,locationId:locId})));}
+// Alias used throughout — always recomputed
+Object.defineProperty(window,'whItems',{get:getAllWHItems,configurable:true});
+// whNextId: global counter across all stores
+function nextWHId(){const max=getAllWHItems().reduce((m,i)=>Math.max(m,i.id||0),0);return max+1;}
+
+// ═══════════════════════════════════════════════════════════
+// PERSISTENCE
+// ═══════════════════════════════════════════════════════════
+function saveAll(){cloudSave();}
+function loadAll(){/* replaced by cloudLoad */}
+function syncCur(){if(curProd===null)return;prods[curProd]={...prods[curProd],trucks,items,nextId,scanLog,updatedAt:Date.now()};}
+function saveWH(){
+  try{localStorage.setItem('obv5_wh',JSON.stringify({stores:whStores,log:whLog,locations:whLocations}));}catch(e){}
+}
+function loadWH(){
+  try{
+    const d=localStorage.getItem('obv5_wh');
+    if(d){
+      const p=JSON.parse(d);
+      whLog=p.log||[];
+      whLocations=p.locations||[...DEFAULT_LOCS];
+      if(p.stores){
+        whStores=p.stores;
+      } else if(p.items){
+        // Migrate from old flat format
+        whStores={};
+        whLocations.forEach(l=>{whStores[l.id]={items:[],nextId:1};});
+        (p.items||[]).forEach(i=>{const lid=i.locationId||'zele';if(!whStores[lid])whStores[lid]={items:[],nextId:1};const{locationId:_,...rest}=i;whStores[lid].items.push(rest);});
+      }
+      // Ensure all locations have a store
+      whLocations.forEach(l=>{if(!whStores[l.id])whStores[l.id]={items:[],nextId:1};});
+    }
+  }catch(e){whLog=[];whLocations=[...DEFAULT_LOCS];}
+  // Ensure stores exist for all locations
+  whLocations.forEach(l=>{if(!whStores[l.id])whStores[l.id]={items:[],nextId:1};});
+}
+
+// Helper: get store for a location (create if missing)
+function getStore(locId){if(!whStores[locId])whStores[locId]={items:[],nextId:1};return whStores[locId];}
+// Add item to a specific location's store
+function addItemToStore(locId,item){const s=getStore(locId);item.id=nextWHId();s.items.push(item);saveWH();}
+// Remove item from whichever store it's in
+function removeItemFromStore(itemId){Object.values(whStores).forEach(s=>{s.items=s.items.filter(i=>i.id!==itemId);});saveWH();}
+// Update field on item in whichever store it's in
+function updateStoreItem(itemId,updates){Object.values(whStores).forEach(s=>{const it=s.items.find(i=>i.id===itemId);if(it)Object.assign(it,updates,{updated:Date.now()});});saveWH();}
+
+// ═══════════════════════════════════════════════════════════
+// HOME
+// ═══════════════════════════════════════════════════════════
+function renderHome(){
+  const tc=prods.reduce((s,p)=>(p.items||[]).length+s,0);
+  document.getElementById('tr-stats').innerHTML=`<span class="tile-tag">${prods.length} production${prods.length!==1?'s':''}</span><span class="tile-tag">${tc} items</span>`;
+  const all=getAllWHItems();
+  const low=all.filter(i=>(i.qty||0)<(i.min||1)&&(i.qty||0)>0).length;
+  const out=all.filter(i=>(i.qty||0)===0).length;
+  const ok=all.filter(i=>(i.qty||0)>=(i.min||1)).length;
+  let wht=`<span class="tile-tag">${all.length} items</span>`;
+  if(ok)wht+=`<span class="tile-tag">${ok} OK</span>`;
+  if(low)wht+=`<span class="tile-tag warn">⚠ ${low} low</span>`;
+  if(out)wht+=`<span class="tile-tag red">✕ ${out} out</span>`;
+  document.getElementById('wh-stats-home').innerHTML=wht;
+}
+function openTransport(){
+  document.getElementById('sh').classList.remove('active');
+  document.getElementById('str').classList.add('active');
+  renderProductions();
+}
+function openWarehouseScreen(){
+  document.getElementById('sh').classList.remove('active');
+  document.getElementById('swh').classList.add('active');
+  renderLocTabs();renderWHStock();renderWHStats();renderLocList();
+}
+function goHome(){
+  syncCur();saveAll();saveWH();
+  ['sp','ss'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('str').classList.add('active');
+  renderProductions();curProd=null;
+}
+function backToProductions(){
+  syncCur();saveAll();
+  document.getElementById('sp').classList.remove('active');
+  document.getElementById('str').classList.add('active');
+  renderProductions();
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRODUCTIONS LIST
+// ═══════════════════════════════════════════════════════════
+function renderProductions(){
+  const g=document.getElementById('pg');
+  const lbl=document.getElementById('prod-count-label');
+  lbl.textContent=prods.length+' production'+(prods.length!==1?'s':'');
+  g.innerHTML=prods.map((p,i)=>{
+    const ic=(p.items||[]).length,tc2=(p.trucks||[]).length;
+    const d=p.date?new Date(p.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'';
+    return`<div class="pc" onclick="openProd(${i})">
+      <h3>${esc(p.name)}</h3>
+      <div class="meta">${esc(p.dest||'')}${p.dest&&d?' · ':''}${d}</div>
+      <div class="tags"><span class="ptag">${ic} items</span><span class="ptag">${tc2} trucks</span>${p.notes?`<span class="ptag">${esc(p.notes.slice(0,20))}</span>`:''}</div>
+      <div class="pca" onclick="event.stopPropagation()">
+        <button class="btn sm pri" onclick="openProd(${i})">Open</button>
+        <button class="btn sm" onclick="exportProdById(${i})">Export</button>
+        <button class="btn sm red" onclick="delProd(${i})">Delete</button>
+      </div>
+    </div>`;
+  }).join('')+`<div class="npc" onclick="openNPM()">+ New Production</div>`;
+}
+function openNPM(){
+  ['np-n','np-d','np-nt'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('np-dt').value='';
+  document.getElementById('npm').classList.add('open');
+  setTimeout(()=>document.getElementById('np-n').focus(),50);
+}
+function closeNPM(){document.getElementById('npm').classList.remove('open');}
+function createProd(){
+  const name=document.getElementById('np-n').value.trim();if(!name){document.getElementById('np-n').focus();return;}
+  prods.push({id:Date.now(),name,dest:document.getElementById('np-d').value.trim(),date:document.getElementById('np-dt').value,notes:document.getElementById('np-nt').value.trim(),trucks:[{id:'t1',name:'Truck 1',length:1360,width:247,height:270,maxWeight:24000,notes:''}],items:[],nextId:1,scanLog:[],createdAt:Date.now(),updatedAt:Date.now()});
+  saveAll();closeNPM();renderProductions();openProd(prods.length-1);
+}
+function openProd(i){
+  curProd=i;const p=prods[i];
+  trucks=JSON.parse(JSON.stringify(p.trucks||[]));
+  items=JSON.parse(JSON.stringify(p.items||[]));
+  nextId=p.nextId||1;scanLog=p.scanLog||[];
+  visualData={};
+  document.getElementById('pd').textContent=p.name;
+  document.getElementById('str').classList.remove('active');
+  document.getElementById('sp').classList.add('active');
+  showTab('items');renderTrucks();updTruckFilter();renderTable();updStats();
+}
+function delProd(i){if(!confirm('Delete "'+prods[i].name+'"?'))return;prods.splice(i,1);saveAll();renderProductions();}
+
+// ═══════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════
+function showTab(n){
+  document.querySelectorAll('#sp .panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('#sp .tab').forEach(t=>t.classList.remove('active'));
+  // map legacy tab names to fleet
+  if(n==='trucks'||n==='plan'||n==='visual')n='fleet';
+  const panel=document.getElementById('panel-'+n);if(panel)panel.classList.add('active');
+  const tab=document.getElementById('tab-'+n);if(tab)tab.classList.add('active');
+  if(n==='fleet')renderFleet();
+  if(n==='export')genExpPrev();if(n==='qr')renderQR();
+}
+function showWHTab(n){
+  document.querySelectorAll('#swh .panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('#swh .tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('panel-wh-'+n).classList.add('active');
+  document.getElementById('whtab-'+n).classList.add('active');
+  if(n==='overview')renderWHOverview();if(n==='log')renderWHLog();
+  if(n==='qrwh')renderWHQR();if(n==='settings')renderLocList();
+}
+
+// ═══════════════════════════════════════════════════════════
+// LOCATIONS
+// ═══════════════════════════════════════════════════════════
+function locOptions(){return whLocations.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}${l.note?' ('+l.note+')':''}</option>`).join('');}
+function renderLocTabs(){
+  const el=document.getElementById('loc-tabs');
+  el.innerHTML=`<button class="loc-tab ${whLocFilter==='all'?'active':''}" onclick="setLocFilter('all')">All</button>`
+    +whLocations.map(l=>`<button class="loc-tab ${whLocFilter===l.id?'active':''}" onclick="setLocFilter('${l.id}')">${esc(l.name)}${l.note&&l.note.toLowerCase().includes('closed')?'  🔒':''}</button>`).join('');
+  // Also update the location dropdown in the add form
+  document.getElementById('wfloc').innerHTML=locOptions();
+}
+function setLocFilter(id){whLocFilter=id;renderLocTabs();renderWHStock();}
+function renderLocList(){
+  const el=document.getElementById('loc-list');
+  el.innerHTML=whLocations.map((l,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd)">
+    <span style="flex:1;font-size:.85rem">${esc(l.name)}</span>
+    ${l.note?`<span style="font-size:.7rem;color:var(--tx3);font-style:italic">${esc(l.note)}</span>`:''}
+    <span style="font-size:.7rem;color:var(--tx3)">${whItems.filter(it=>it.locationId===l.id).length} items</span>
+    <button class="btn sm red" onclick="removeLocation('${l.id}')">Remove</button>
+  </div>`).join('');
+}
+function addLocation(){
+  const name=document.getElementById('new-loc-name').value.trim();if(!name)return;
+  const id='loc_'+Date.now();const note=document.getElementById('new-loc-note').value.trim();
+  whLocations.push({id,name,note});
+  document.getElementById('new-loc-name').value='';document.getElementById('new-loc-note').value='';
+  saveWH();renderLocTabs();renderLocList();
+}
+function addLocationQuick(){
+  const name=document.getElementById('quick-loc-name').value.trim();if(!name)return;
+  whLocations.push({id:'loc_'+Date.now(),name,note:''});
+  document.getElementById('quick-loc-name').value='';
+  saveWH();renderLocTabs();renderLocList();renderLocMgrBody();
+}
+function removeLocation(id){
+  const loc=whLocations.find(l=>l.id===id);
+  const count=(getStore(id).items||[]).length;
+  if(count>0&&!confirm(`${count} items are stored at "${loc?.name}". They will be unassigned. Remove anyway?`))return;
+  delete whStores[id];
+  whLocations=whLocations.filter(l=>l.id!==id);
+  if(whLocFilter===id)whLocFilter='all';
+  saveWH();renderLocTabs();renderLocList();renderWHStock();
+}
+function openLocMgr(){
+  renderLocMgrBody();document.getElementById('loc-mgr').classList.add('open');
+}
+function renderLocMgrBody(){
+  document.getElementById('loc-mgr-body').innerHTML=whLocations.map((l,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--bd)">
+      <span style="flex:1;font-size:.83rem">${esc(l.name)}${l.note?` <span style="color:var(--tx3);font-size:.7rem;font-style:italic">(${esc(l.note)})</span>`:''}</span>
+      <span style="font-size:.68rem;color:var(--tx3)">${whItems.filter(it=>it.locationId===l.id).length} items</span>
+      <button class="btn sm red" onclick="removeLocation('${l.id}');renderLocMgrBody()">✕</button>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// TRUCKS
+// ═══════════════════════════════════════════════════════════
+function tvol(t){return(t.length/100)*(t.width/100)*(t.height/100);}
+function twt(tn){return items.filter(i=>i.truck===tn).reduce((s,i)=>s+(i.weight||0)*(i.qty||1),0);}
+function tvl(tn){return items.filter(i=>i.truck===tn).reduce((s,i)=>s+(i.l/100)*(i.w/100)*(i.h/100)*(i.qty||1),0);}
+function addTruck(){
+  const name=document.getElementById('tn').value.trim();if(!name){alert('Enter a name.');return;}
+  if(trucks.find(t=>t.name===name)){alert('Name taken.');return;}
+  trucks.push({id:'t'+Date.now(),name,length:+document.getElementById('tl').value||1360,width:+document.getElementById('tw2').value||247,height:+document.getElementById('th').value||270,maxWeight:+document.getElementById('tmw').value||24000,notes:document.getElementById('tnt').value.trim()});
+  document.getElementById('tn').value='';renderTrucks();updTruckFilter();saveAll();
+}
+function delTruck(id){
+  const t=trucks.find(x=>x.id===id);
+  if(items.some(i=>i.truck===t.name)){if(!confirm('Items will be unassigned. Continue?'))return;items.forEach(i=>{if(i.truck===t.name)i.truck='';}); }
+  trucks=trucks.filter(x=>x.id!==id);renderTrucks();updTruckFilter();renderTable();updStats();saveAll();
+}
+function renderTrucks(){
+  const el=document.getElementById('trl'),em=document.getElementById('tre');
+  if(!trucks.length){el.innerHTML='';em.style.display='';return;}em.style.display='none';
+  el.innerHTML=trucks.map(t=>{
+    const vol=tvol(t),uw=twt(t.name),uv=tvl(t.name);
+    const pw=t.maxWeight?Math.min(100,Math.round(uw/t.maxWeight*100)):0;
+    const pv=vol?Math.min(100,Math.round(uv/vol*100)):0;
+    const bw=pw>90?'var(--red)':pw>70?'var(--gold)':'var(--grn)';
+    return`<div style="border:1px solid var(--bd);border-radius:var(--r);padding:9px 12px;margin-bottom:6px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;background:var(--sf)">
+      <div style="flex:1;min-width:120px"><div style="font-weight:bold;color:var(--navy2);font-size:.86rem">🚛 ${esc(t.name)}</div>
+      <div style="font-size:.65rem;color:var(--tx3);margin-top:2px">${t.length}×${t.width}×${t.height} cm · ${vol.toFixed(1)} m³ · max ${t.maxWeight.toLocaleString()} kg</div></div>
+      <div style="flex:2;min-width:175px">
+        <div style="font-size:.63rem;color:var(--tx3);display:flex;justify-content:space-between;margin-bottom:2px"><span>Wt: ${uw.toLocaleString()} kg</span><span>${pw}%</span></div>
+        <div class="spbr"><div class="spbf" style="width:${pw}%;background:${bw}"></div></div>
+        <div style="font-size:.63rem;color:var(--tx3);display:flex;justify-content:space-between;margin:3px 0 2px"><span>Vol: ${uv.toFixed(1)} / ${vol.toFixed(1)} m³</span><span>${pv}%</span></div>
+        <div class="spbr"><div class="spbf" style="width:${pv}%;background:${pv>90?'var(--red)':pv>70?'var(--gold)':'var(--grn)'}"></div></div>
+      </div>
+      <button class="btn sm red" onclick="delTruck('${t.id}')">Remove</button>
+    </div>`;
+  }).join('');
+}
+function updTruckFilter(){
+  document.getElementById('filt-t').innerHTML='<option value="">All trucks</option>'+trucks.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTO-ASSIGN
+// ═══════════════════════════════════════════════════════════
+function autoAssign(){
+  if(!items.length){alert('No items.');return;}
+  // ensure at least one truck exists as template
+  if(!trucks.length)trucks.push({id:'t1',name:'Truck 1',length:1360,width:247,height:270,maxWeight:24000,notes:''});
+  const tpl=trucks[0];
+  // clear existing assignments
+  items.forEach(i=>i.truck='');
+  const sorted=[...items].sort((a,b)=>a.prio-b.prio||((b.l||0)*(b.w||0))-((a.l||0)*(a.w||0)));
+  const slots=[];
+  function newSlot(){let n=slots.length+1;while(trucks.find(t=>t.name==='Truck '+n))n++;const nm='Truck '+n;if(!trucks.find(t=>t.name===nm))trucks.push({id:'t'+Date.now()+n,name:nm,length:tpl.length,width:tpl.width,height:tpl.height,maxWeight:tpl.maxWeight,notes:'Auto'});const s={name:nm,uv:0,uw:0,mv:tvol(tpl)*.95,mw:tpl.maxWeight*.95};slots.push(s);return s;}
+  let cur=newSlot();
+  sorted.forEach(item=>{const vol=(item.l/100)*(item.w/100)*(item.h/100)*(item.qty||1),wt=(item.weight||0)*(item.qty||1);if(cur.uv+vol>cur.mv||cur.uw+wt>cur.mw)cur=newSlot();const ri=items.find(i=>i.id===item.id);if(ri)ri.truck=cur.name;cur.uv+=vol;cur.uw+=wt;});
+  renderTable();updStats();renderTrucks();updTruckFilter();saveAll();
+  return slots.length;
+}
+function autoAssignAndRender(){
+  const n=autoAssign();
+  showTab('fleet');
+  if(n!==undefined)showFleetNotice(`✓ ${items.length} items assigned across ${n} truck(s).`);
+}
+function showFleetNotice(msg){
+  let el=document.getElementById('fleet-notice');
+  if(!el){el=document.createElement('div');el.id='fleet-notice';el.style.cssText='padding:7px 12px;background:var(--grnl);color:var(--grn);border:1px solid #b5dcc0;border-radius:var(--r);font-size:.78rem;margin-bottom:.65rem';document.getElementById('panel-fleet').insertBefore(el,document.getElementById('fleet-container'));}
+  el.textContent=msg;clearTimeout(el._t);el._t=setTimeout(()=>el.remove(),3500);
+}
+
+// ═══════════════════════════════════════════════════════════
+// FLEET VIEW (merged trucks + plan + 2D)
+// ═══════════════════════════════════════════════════════════
+function renderFleet(){
+  const container=document.getElementById('fleet-container');
+  const empty=document.getElementById('fleet-empty');
+  const asgn=items.filter(i=>i.truck);
+  if(!asgn.length){container.innerHTML='';empty.style.display='';return;}
+  empty.style.display='none';
+  // Legend
+  document.getElementById('fleet-dept-leg').innerHTML=DEPTS.filter(d=>asgn.some(i=>i.dept===d)).map(d=>`<div style="display:flex;align-items:center;gap:4px;font-size:.67rem;color:var(--tx2)"><div style="width:10px;height:10px;border-radius:3px;background:${DC[d]}"></div>${DL[d]}</div>`).join('');
+  const byTruck=gb(asgn,'truck');
+  container.innerHTML='';
+  Object.entries(byTruck).forEach(([tn,ti],trIdx)=>{
+    const tk=trucks.find(t=>t.name===tn)||{length:1360,width:247,height:270,maxWeight:24000};
+    const uw=ti.reduce((s,i)=>s+(i.weight||0)*(i.qty||1),0);
+    const uv=ti.reduce((s,i)=>s+(i.l/100)*(i.w/100)*(i.h/100)*(i.qty||1),0);
+    const mv=tvol(tk),pw=tk.maxWeight?Math.min(100,Math.round(uw/tk.maxWeight*100)):0;
+    const pv=mv?Math.min(100,Math.round(uv/mv*100)):0;
+    const sid='flt_'+tn.replace(/[^a-zA-Z0-9]/g,'_');
+    // Build item list HTML grouped by dept
+    const itemListHTML=DEPTS.filter(d=>ti.some(i=>i.dept===d)).map(d=>{
+      const di=ti.filter(i=>i.dept===d).sort((a,b)=>a.prio-b.prio);
+      return`<div class="fleet-dept-section">
+        <div class="fleet-dept-label" style="color:${DC[d]};border-color:${DCL[d]}">${DL[d]}</div>
+        ${di.map(it=>{
+          const whl=whLookup(it.name);
+          const whTip=whl?` · 🏭 ${whl.loc?whl.loc.name:'?'} ×${whl.match.qty}`:'';
+          return`<div class="fleet-item-row" title="${esc(it.name)} — ${it.l}×${it.w}×${it.h}cm · ${it.weight}kg · P${it.prio}${whTip}${it.notes?' · '+it.notes:''}">
+            <span class="pb p${it.prio}">${it.prio}</span>
+            <span class="fi-name">${esc(it.name)}</span>
+            <span class="fi-detail">×${it.qty}</span>
+            ${whl?`<span class="wh-badge ${whl.status}" style="font-size:.58rem">${whl.loc?whl.loc.name.split(' ')[0]:'?'}</span>`:''}
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('');
+    const row=document.createElement('div');
+    row.className='fleet-truck-row';
+    row.innerHTML=`
+      <div class="fleet-right">
+        <div class="fleet-truck-name">🚛 ${esc(tn)}</div>
+        <div class="fleet-truck-meta">${tk.length}×${tk.width}×${tk.height} cm · ${ti.length} items · ${uw.toLocaleString()} kg</div>
+        <div style="margin-bottom:.4rem">
+          <div style="font-size:.61rem;color:var(--tx3);display:flex;justify-content:space-between"><span>Weight</span><span>${pw}%</span></div>
+          <div class="spbr"><div class="spbf" style="width:${pw}%;background:${pw>90?'var(--red)':pw>70?'var(--gold)':'var(--grn)'}"></div></div>
+          <div style="font-size:.61rem;color:var(--tx3);display:flex;justify-content:space-between;margin-top:3px"><span>Volume</span><span>${pv}%</span></div>
+          <div class="spbr"><div class="spbf" style="width:${pv}%;background:${pv>90?'var(--red)':pv>70?'var(--gold)':'var(--grn)'}"></div></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;max-height:340px">${itemListHTML}</div>
+        <button class="btn sm red" style="margin-top:.55rem;align-self:flex-start" onclick="delTruck('${trucks.find(t=>t.name===tn)?.id||''}')">Remove Truck</button>
+      </div>
+      <div class="fleet-left">
+        <div class="fleet-canvas-wrap" id="fcw-${sid}">
+          <canvas id="fc-${sid}" style="display:block;width:100%"></canvas>
+        </div>
+      </div>`;
+    container.appendChild(row);
+    // Draw canvas after render
+    setTimeout(()=>{
+      const wrap=document.getElementById('fcw-'+sid);
+      const cv=document.getElementById('fc-'+sid);
+      if(!wrap||!cv)return;
+      // Vertical orientation: width of canvas = truck width (narrow), height = truck length (tall)
+      const cW=wrap.clientWidth||200;
+      const aspect=tk.length/tk.width; // typically ~5.5
+      cv.width=cW;cv.height=Math.min(cW*aspect,600);
+      initFleetCanvas(cv,tk,ti,tn,sid);
+    },80);
+  });
+}
+
+function initFleetCanvas(cv,truck,ti,tn,sid){
+  const ctx=cv.getContext('2d');const W=cv.width,H=cv.height,PAD=22;
+  // Vertical: x = truck width, y = truck length
+  const scale=Math.min((W-PAD*2)/truck.width,(H-PAD*2)/truck.length);
+  const dW=truck.width*scale,dH=truck.length*scale,oX=(W-dW)/2,oY=(H-dH)/2;
+  const rects=packItemsVertical(truck,ti);
+  visualData[tn]={rects,oX,oY,scale,dW,dH,truck,cv,ctx,W,H,dirty:true,vertical:true};
+  drawFleetCanvas(tn);setupFleetDrag(tn);
+}
+
+function packItemsVertical(truck,truckItems){
+  const sorted=[...truckItems].sort((a,b)=>a.prio-b.prio||((b.l||60)*(b.w||60))-((a.l||60)*(a.w||60)));
+  const rects=[];let curX=0,curY=0,rowW=0;
+  sorted.forEach(item=>{for(let q=0;q<(item.qty||1);q++){
+    // In vertical view: canvas x = truck width, canvas y = truck length
+    const iW=Math.max(item.w||40,12),iH=Math.max(item.l||40,12);
+    if(curY+iH>truck.length){curY=0;curX+=rowW+2;rowW=0;}
+    if(curX+iW>truck.width){rects.push({x:-1,y:-1,w:iW,h:iH,item,overflow:true});continue;}
+    rects.push({x:curX,y:curY,w:iW,h:iH,item,overflow:false});
+    curY+=iH+2;rowW=Math.max(rowW,iW);
+  }});return rects;
+}
+
+function drawFleetCanvas(tn){
+  const d=visualData[tn];if(!d)return;const{ctx,W,H,oX,oY,dW,dH,scale,truck,rects}=d;
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#eeebe2';ctx.fillRect(oX,oY,dW,dH);
+  ctx.strokeStyle='#aaa';ctx.lineWidth=2;ctx.strokeRect(oX,oY,dW,dH);
+  ctx.fillStyle='#bbb';ctx.font='7px sans-serif';ctx.textAlign='center';
+  ctx.fillText('FRONT',oX+dW/2,oY-4);ctx.fillText('REAR',oX+dW/2,oY+dH+10);
+  ctx.save();ctx.translate(oX-5,oY+dH/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText(truck.length+' cm',0,0);ctx.restore();
+  ctx.textAlign='center';ctx.fillText(truck.width+' cm',oX+dW/2,oY+dH+18);
+  let ov=0;rects.forEach(r=>{
+    if(r.overflow){ov++;return;}
+    const px=oX+r.x*scale,py=oY+r.y*scale,pw=r.w*scale,ph=r.h*scale,col=DC[r.item.dept]||'#666';
+    ctx.fillStyle=col;ctx.globalAlpha=.72;ctx.fillRect(px,py,pw,ph);
+    ctx.globalAlpha=1;ctx.strokeStyle=col;ctx.lineWidth=1;ctx.strokeRect(px,py,pw,ph);
+    if(pw>14&&ph>9){ctx.fillStyle='white';const fs=Math.min(9,ph*.35,pw*.18);ctx.font=`bold ${fs}px sans-serif`;ctx.textAlign='center';
+    ctx.fillText(r.item.name.length>12?r.item.name.slice(0,10)+'…':r.item.name,px+pw/2,py+ph/2+fs*.35);}
+  });
+  ctx.globalAlpha=1;if(ov>0){ctx.fillStyle='rgba(168,40,40,.88)';ctx.fillRect(oX,oY+dH-15,dW,15);ctx.fillStyle='white';ctx.font='bold 7px sans-serif';ctx.textAlign='center';ctx.fillText('⚠ '+ov+' overflow',oX+dW/2,oY+dH-5);}
+  d.dirty=false;
+}
+
+function setupFleetDrag(tn){
+  const d=visualData[tn];const cv=d.cv;
+  function gp(ev){const r=cv.getBoundingClientRect();const cx=ev.touches?ev.touches[0].clientX:ev.clientX,cy=ev.touches?ev.touches[0].clientY:ev.clientY;return{x:(cx-r.left)*(cv.width/r.width),y:(cy-r.top)*(cv.height/r.height)};}
+  function hit(pos){return d.rects.find(r=>{if(r.overflow)return false;const px=d.oX+r.x*d.scale,py=d.oY+r.y*d.scale;return pos.x>=px&&pos.x<=px+r.w*d.scale&&pos.y>=py&&pos.y<=py+r.h*d.scale;});}
+  let dr=null,dox=0,doy=0,raf=null;
+  function startDrag(ev){const pos=gp(ev);const h=hit(pos);if(!h)return;ev.preventDefault();dr=h;dox=pos.x-(d.oX+h.x*d.scale);doy=pos.y-(d.oY+h.y*d.scale);cv.style.cursor='grabbing';}
+  function moveDrag(ev){const pos=gp(ev);
+    if(dr){ev.preventDefault();const nx=Math.max(0,Math.min(d.truck.width-dr.w,(pos.x-dox-d.oX)/d.scale)),ny=Math.max(0,Math.min(d.truck.length-dr.h,(pos.y-doy-d.oY)/d.scale));let ok=true;for(const r of d.rects.filter(r=>r!==dr&&!r.overflow)){if(nx<r.x+r.w&&nx+dr.w>r.x&&ny<r.y+r.h&&ny+dr.h>r.y){ok=false;break;}}if(ok){dr.x=nx;dr.y=ny;d.dirty=true;}if(!raf)raf=requestAnimationFrame(()=>{if(d.dirty)drawFleetCanvas(tn);raf=null;});}
+    else{showTT(hit(pos),ev);}
+  }
+  function endDrag(){dr=null;cv.style.cursor='grab';}
+  cv.addEventListener('mousedown',startDrag,{passive:false});cv.addEventListener('mousemove',moveDrag,{passive:false});cv.addEventListener('mouseup',endDrag);cv.addEventListener('mouseleave',()=>{endDrag();hideTT();});
+  cv.addEventListener('touchstart',startDrag,{passive:false});cv.addEventListener('touchmove',moveDrag,{passive:false});cv.addEventListener('touchend',endDrag);
+  cv.addEventListener('click',ev=>{const h=hit(gp(ev));if(h&&h.item.photo)window.open(h.item.photo,'_blank','noopener');});
+}
+
+// Add truck modal
+function openAddTruckModal(){
+  document.getElementById('atm-n').value='Truck '+(trucks.length+1);
+  document.getElementById('atm-l').value=trucks[0]?.length||1360;
+  document.getElementById('atm-w').value=trucks[0]?.width||247;
+  document.getElementById('atm-h').value=trucks[0]?.height||270;
+  document.getElementById('atm-mw').value=trucks[0]?.maxWeight||24000;
+  document.getElementById('atm-nt').value='';
+  document.getElementById('add-truck-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('atm-n').focus(),50);
+}
+function closeAddTruckModal(){document.getElementById('add-truck-modal').classList.remove('open');}
+function addTruckFromModal(){
+  const name=document.getElementById('atm-n').value.trim();
+  if(!name){document.getElementById('atm-n').focus();return;}
+  if(trucks.find(t=>t.name===name)){alert('Name already taken.');return;}
+  trucks.push({id:'t'+Date.now(),name,length:+document.getElementById('atm-l').value||1360,width:+document.getElementById('atm-w').value||247,height:+document.getElementById('atm-h').value||270,maxWeight:+document.getElementById('atm-mw').value||24000,notes:document.getElementById('atm-nt').value.trim()});
+  closeAddTruckModal();renderTrucks();updTruckFilter();renderFleet();saveAll();
+}
+
+// ═══════════════════════════════════════════════════════════
+// TRANSPORT ITEMS
+// ═══════════════════════════════════════════════════════════
+function addItem(){
+  const name=document.getElementById('fn').value.trim();if(!name){document.getElementById('fn').focus();return;}
+  items.push({id:nextId++,name,qty:+document.getElementById('fq').value||1,l:+document.getElementById('fl').value||0,w:+document.getElementById('fw').value||0,h:+document.getElementById('fh').value||0,weight:+document.getElementById('fwt').value||0,dept:document.getElementById('fd').value,prio:+document.getElementById('fp').value,truck:'',notes:document.getElementById('fnt').value.trim(),photo:null});
+  clearForm();renderTable();updStats();saveAll();document.getElementById('fn').focus();
+}
+function clearForm(){['fn','fl','fw','fh','fwt','fnt'].forEach(id=>document.getElementById(id).value='');document.getElementById('fq').value='1';document.getElementById('fd').value='PT';document.getElementById('fp').value='2';}
+function deleteItem(id){items=items.filter(i=>i.id!==id);renderTable();updStats();renderTrucks();saveAll();}
+function clearAll(){if(!confirm('Remove all items?'))return;items=[];nextId=1;renderTable();updStats();renderTrucks();saveAll();}
+function setField(id,f,v){const it=items.find(i=>i.id===id);if(it){it[f]=v;updStats();renderTrucks();saveAll();if(document.getElementById('panel-fleet')?.classList.contains('active'))renderFleet();}}
+function updStats(){
+  const tc=new Set(items.map(i=>i.truck).filter(Boolean)).size,w=items.reduce((s,i)=>s+(i.weight||0)*(i.qty||1),0),vol=items.reduce((s,i)=>s+(i.l/100)*(i.w/100)*(i.h/100)*(i.qty||1),0);
+  document.getElementById('s-i').textContent=items.length;document.getElementById('s-t').textContent=tc||calcN();
+  document.getElementById('s-w').textContent=w.toLocaleString(undefined,{maximumFractionDigits:0})+' kg';document.getElementById('s-v').textContent=vol.toFixed(1)+' m³';
+}
+function calcN(){if(!trucks.length||!items.length)return'?';const t=trucks[0];let uv=0,uw=0,c=1;items.forEach(i=>{const v=(i.l/100)*(i.w/100)*(i.h/100)*(i.qty||1),wt=(i.weight||0)*(i.qty||1);if(uv+v>tvol(t)*.95||uw+wt>t.maxWeight*.95){c++;uv=0;uw=0;}uv+=v;uw+=wt;});return'~'+c;}
+
+// ── WAREHOUSE LINK: find where this item is stored ──
+function whLookup(itemName){
+  const all=getAllWHItems();
+  const match=all.find(i=>i.name.toLowerCase()===itemName.toLowerCase());
+  if(!match)return null;
+  const loc=whLocations.find(l=>l.id===match.locationId);
+  const status=(match.qty||0)===0?'out':(match.qty||0)<(match.min||1)?'low':'ok';
+  return{match,loc,status};
+}
+
+function renderTable(){
+  const tb=document.getElementById('itb');
+  const q=(document.getElementById('srch').value||'').toLowerCase();
+  const fd=document.getElementById('filt-d').value,ft=document.getElementById('filt-t').value;
+  const fi=items.filter(i=>(!q||i.name.toLowerCase().includes(q))&&(!fd||i.dept===fd)&&(!ft||i.truck===ft));
+  const em=document.getElementById('em');document.getElementById('btn-ca').style.display=items.length?'':'none';
+  if(!items.length){tb.innerHTML='';em.style.display='';return;}em.style.display='none';
+  const tro='<option value="">—</option>'+trucks.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
+  const dro=DEPTS.map(d=>`<option value="${d}">${DL[d]}</option>`).join('');
+  tb.innerHTML=fi.map((item,idx)=>{
+    const ts=tro.replace(`value="${esc(item.truck)}"`,`value="${esc(item.truck)}" selected`);
+    const ds=dro.replace(`value="${item.dept}"`,`value="${item.dept}" selected`);
+    const ph=item.photo
+      ?`<a class="phl" href="${esc(item.photo)}" target="_blank" rel="noopener" title="${esc(item.photo)}">🔗 Drive</a><span class="phl-empty" onclick="setPhotoLink(${item.id})" title="Link wijzigen">✎</span>`
+      :`<span class="phl-empty" onclick="setPhotoLink(${item.id})" title="Drive link toevoegen">📎</span>`;
+    // Warehouse location badge (location only, no stock count)
+    const whl=whLookup(item.name);
+    const whBadge=whl&&whl.loc
+      ?`<span class="wh-badge ${whl.status}" title="${whl.match.qty} in stock">📍 ${esc(whl.loc.name)}</span>`
+      :`<span style="font-size:.62rem;color:var(--tx3)">—</span>`;
+    return`<tr>
+      <td>${ph}</td>
+      <td style="color:var(--tx3);font-size:.67rem">${idx+1}</td>
+      <td><input value="${esc(item.name)}" onchange="setField(${item.id},'name',this.value)" style="min-width:105px"></td>
+      <td><input type="number" value="${item.qty}" min="1" onchange="setField(${item.id},'qty',+this.value)" style="width:38px;text-align:center"></td>
+      <td><span style="display:inline-flex;gap:2px;align-items:center"><input type="number" value="${item.l}" min="0" onchange="setField(${item.id},'l',+this.value)" style="width:38px;text-align:right">×<input type="number" value="${item.w}" min="0" onchange="setField(${item.id},'w',+this.value)" style="width:38px;text-align:right">×<input type="number" value="${item.h}" min="0" onchange="setField(${item.id},'h',+this.value)" style="width:38px;text-align:right"></span></td>
+      <td><input type="number" value="${item.weight}" min="0" onchange="setField(${item.id},'weight',+this.value)" style="width:48px"> kg</td>
+      <td><select onchange="setField(${item.id},'dept',this.value)">${ds}</select></td>
+      <td><span class="pb p${item.prio}">${item.prio}</span></td>
+      <td><select onchange="setField(${item.id},'truck',this.value)">${ts}</select></td>
+      <td>${whBadge}</td>
+      <td><input value="${esc(item.notes||'')}" onchange="setField(${item.id},'notes',this.value)" placeholder="—" style="min-width:75px"></td>
+      <td><button class="btn sm" onclick="jumpToQR(${item.id})">🔲</button></td>
+      <td><button class="btn sm red" onclick="deleteItem(${item.id})">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+function openPhotoLink(id){
+  const it=items.find(i=>i.id===id);
+  if(!it||!it.photo)return;
+  window.open(it.photo,'_blank','noopener');
+}
+function setPhotoLink(id){
+  const it=items.find(i=>i.id===id);if(!it)return;
+  const url=prompt('Plak hier de Google Drive link (of andere URL):',it.photo||'');
+  if(url===null)return;
+  it.photo=url.trim()||null;
+  renderTable();saveAll();
+}
+function closeLB(){}
+
+// ═══════════════════════════════════════════════════════════
+// PLAN
+// ═══════════════════════════════════════════════════════════
+function renderPlan(){
+  const el=document.getElementById('pc'),em=document.getElementById('pe');
+  const asgn=items.filter(i=>i.truck);if(!asgn.length){el.innerHTML='';em.style.display='';return;}em.style.display='none';
+  el.innerHTML=Object.entries(gb(asgn,'truck')).map(([tn,ti])=>{
+    const tk=trucks.find(t=>t.name===tn)||{};const tw=ti.reduce((s,i)=>s+(i.weight||0)*(i.qty||1),0);const tv=ti.reduce((s,i)=>s+(i.l/100)*(i.w/100)*(i.h/100)*(i.qty||1),0);
+    const dsecs=DEPTS.filter(d=>ti.some(i=>i.dept===d)).map(d=>{const di=ti.filter(i=>i.dept===d).sort((a,b)=>a.prio-b.prio);
+      return`<div style="margin-bottom:.55rem"><div style="font-size:.61rem;text-transform:uppercase;letter-spacing:.1em;color:${DC[d]};padding:2px 0;border-bottom:1px solid ${DCL[d]};margin-bottom:4px">${DL[d]}</div>
+        ${di.map(it=>{const whl=whLookup(it.name);return`<div style="display:flex;align-items:center;gap:6px;padding:4px 7px;border-radius:var(--r);border:1px solid var(--bd);background:var(--sf);margin-bottom:3px">
+          <span class="pb p${it.prio}">${it.prio}</span>
+          <span style="flex:1;font-size:.8rem">${esc(it.name)}</span>
+          <span style="background:var(--tr-l);color:var(--navy2);padding:1px 6px;border-radius:10px;font-size:.67rem;font-weight:bold">×${it.qty}</span>
+          <span style="font-size:.67rem;color:var(--tx3)">${it.l}×${it.w}×${it.h}cm ${it.weight?'· '+(it.weight*(it.qty||1)).toLocaleString()+'kg':''}</span>
+          ${whl?`<span class="wh-badge ${whl.status}" style="font-size:.6rem">${whl.loc?whl.loc.name:'?'} · ${whl.match.qty}</span>`:''}
+        </div>`}).join('')}
+      </div>`;
+    }).join('');
+    return`<div class="card" style="margin-bottom:.75rem"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:.7rem"><div><div style="font-size:.9rem;font-weight:bold;color:var(--navy2)">🚛 ${esc(tn)}</div><div style="font-size:.67rem;color:var(--tx3)">${ti.length} items · ${tw.toLocaleString()} kg${tk.maxWeight?' / '+tk.maxWeight.toLocaleString()+' kg':''} · ${tv.toFixed(1)} m³</div></div></div>${dsecs}</div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// 2D VISUAL
+// ═══════════════════════════════════════════════════════════
+function renderVisual(){
+  const cc=document.getElementById('cc'),ve=document.getElementById('ve');
+  const asgn=items.filter(i=>i.truck);if(!asgn.length){cc.innerHTML='';ve.style.display='';return;}ve.style.display='none';cc.innerHTML='';
+  document.getElementById('dept-leg').innerHTML=DEPTS.map(d=>`<div style="display:flex;align-items:center;gap:4px;font-size:.67rem;color:var(--tx2)"><div style="width:10px;height:10px;border-radius:3px;background:${DC[d]}"></div>${DL[d]}</div>`).join('');
+  Object.entries(gb(asgn,'truck')).forEach(([tn,ti])=>{
+    const tk=trucks.find(t=>t.name===tn)||{length:1360,width:247,height:270,maxWeight:24000};
+    const uw=ti.reduce((s,i)=>s+(i.weight||0)*(i.qty||1),0),uv=ti.reduce((s,i)=>s+(i.l/100)*(i.w/100)*(i.h/100)*(i.qty||1),0),mv=tvol(tk);
+    const pw=tk.maxWeight?Math.min(100,Math.round(uw/tk.maxWeight*100)):0,pv=mv?Math.min(100,Math.round(uv/mv*100)):0;
+    const sid=tn.replace(/[^a-zA-Z0-9]/g,'_');
+    const card=document.createElement('div');card.className='tvc';
+    card.innerHTML=`<h3>🚛 ${esc(tn)}</h3><div class="tcm"><span>${tk.length}×${tk.width} cm</span><span>${uw.toLocaleString()} / ${tk.maxWeight.toLocaleString()} kg</span><span>${uv.toFixed(1)} / ${mv.toFixed(1)} m³</span></div>
+      <canvas class="tc" id="c-${sid}" height="225"></canvas>
+      <div class="spb">
+        <div class="spbl"><span>Volume</span><span>${pv}% — ${(mv-uv).toFixed(1)} m³ free</span></div><div class="spbr"><div class="spbf" style="width:${pv}%;background:${pv>90?'var(--red)':pv>70?'var(--gold)':'var(--grn)'}"></div></div>
+        <div class="spbl" style="margin-top:3px"><span>Weight</span><span>${pw}% — ${(tk.maxWeight-uw).toLocaleString()} kg free</span></div><div class="spbr"><div class="spbf" style="width:${pw}%;background:${pw>90?'var(--red)':pw>70?'var(--gold)':'var(--grn)'}"></div></div>
+      </div>`;
+    cc.appendChild(card);
+    setTimeout(()=>{const cv=document.getElementById('c-'+sid);if(!cv)return;cv.width=cv.parentElement.clientWidth-30;initCanvas(cv,tk,ti,tn);},60);
+  });
+}
+function packItems(truck,truckItems){
+  const sorted=[...truckItems].sort((a,b)=>a.prio-b.prio||((b.l||60)*(b.w||60))-((a.l||60)*(a.w||60)));
+  const rects=[];let curX=0,curY=0,rowH=0;
+  sorted.forEach(item=>{for(let q=0;q<(item.qty||1);q++){const iW=Math.max(item.l||40,12),iH=Math.max(item.w||40,12);if(curX+iW>truck.length){curX=0;curY+=rowH+2;rowH=0;}if(curY+iH>truck.width){rects.push({x:-1,y:-1,w:iW,h:iH,item,overflow:true});continue;}rects.push({x:curX,y:curY,w:iW,h:iH,item,overflow:false});curX+=iW+2;rowH=Math.max(rowH,iH);}});return rects;
+}
+function initCanvas(cv,truck,ti,tn){
+  const ctx=cv.getContext('2d');const W=cv.width,H=cv.height,PAD=25;
+  const scale=Math.min((W-PAD*2)/truck.length,(H-PAD*2)/truck.width);
+  const dW=truck.length*scale,dH=truck.width*scale,oX=(W-dW)/2,oY=(H-dH)/2;
+  const rects=packItems(truck,ti);
+  visualData[tn]={rects,oX,oY,scale,dW,dH,truck,cv,ctx,W,H,dirty:true};
+  drawCanvas(tn);setupDrag(tn);
+}
+function drawCanvas(tn){
+  const d=visualData[tn];if(!d)return;const{ctx,W,H,oX,oY,dW,dH,scale,truck,rects}=d;
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#eeebe2';ctx.fillRect(oX,oY,dW,dH);ctx.strokeStyle='#999';ctx.lineWidth=2;ctx.strokeRect(oX,oY,dW,dH);
+  ctx.fillStyle='#bbb';ctx.font='8px sans-serif';ctx.textAlign='center';ctx.fillText('← REAR',oX+dW*.15,oY-5);ctx.fillText('FRONT →',oX+dW*.85,oY-5);
+  ctx.textAlign='right';ctx.fillText(truck.length+' cm',oX+dW,oY+dH+12);ctx.save();ctx.translate(oX-6,oY+dH/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText(truck.width+' cm',0,0);ctx.restore();
+  let ov=0;rects.forEach(r=>{if(r.overflow){ov++;return;}const px=oX+r.x*scale,py=oY+r.y*scale,pw=r.w*scale,ph=r.h*scale,col=DC[r.item.dept]||'#666';ctx.fillStyle=col;ctx.globalAlpha=.70;ctx.fillRect(px,py,pw,ph);ctx.globalAlpha=1;ctx.strokeStyle=col;ctx.lineWidth=1;ctx.strokeRect(px,py,pw,ph);if(pw>18&&ph>9){ctx.fillStyle='white';const fs=Math.min(10,ph*.4,pw*.1);ctx.font=`bold ${fs}px sans-serif`;ctx.textAlign='center';ctx.fillText(r.item.name.length>14?r.item.name.slice(0,12)+'…':r.item.name,px+pw/2,py+ph/2+fs*.35);}});
+  ctx.globalAlpha=1;if(ov>0){ctx.fillStyle='rgba(168,40,40,.88)';ctx.fillRect(oX+dW-70,oY+dH-17,70,17);ctx.fillStyle='white';ctx.font='bold 8px sans-serif';ctx.textAlign='center';ctx.fillText('⚠ '+ov+' overflow',oX+dW-35,oY+dH-5);}d.dirty=false;
+}
+function setupDrag(tn){
+  const d=visualData[tn];const cv=d.cv;
+  function gp(ev){const r=cv.getBoundingClientRect();const cx=ev.touches?ev.touches[0].clientX:ev.clientX,cy=ev.touches?ev.touches[0].clientY:ev.clientY;return{x:(cx-r.left)*(cv.width/r.width),y:(cy-r.top)*(cv.height/r.height)};}
+  function hit(pos){return d.rects.find(r=>{if(r.overflow)return false;const px=d.oX+r.x*d.scale,py=d.oY+r.y*d.scale;return pos.x>=px&&pos.x<=px+r.w*d.scale&&pos.y>=py&&pos.y<=py+r.h*d.scale;});}
+  let dr=null,dox=0,doy=0,raf=null;
+  function startDrag(ev){const pos=gp(ev);const h=hit(pos);if(!h)return;ev.preventDefault();dr=h;dox=pos.x-(d.oX+h.x*d.scale);doy=pos.y-(d.oY+h.y*d.scale);cv.style.cursor='grabbing';}
+  function moveDrag(ev){const pos=gp(ev);
+    if(dr){ev.preventDefault();const nx=Math.max(0,Math.min(d.truck.length-dr.w,(pos.x-dox-d.oX)/d.scale)),ny=Math.max(0,Math.min(d.truck.width-dr.h,(pos.y-doy-d.oY)/d.scale));let ok=true;for(const r of d.rects.filter(r=>r!==dr&&!r.overflow)){if(nx<r.x+r.w&&nx+dr.w>r.x&&ny<r.y+r.h&&ny+dr.h>r.y){ok=false;break;}}if(ok){dr.x=nx;dr.y=ny;d.dirty=true;}if(!raf)raf=requestAnimationFrame(()=>{if(d.dirty)drawCanvas(tn);raf=null;});}else{showTT(hit(pos),ev);}
+  }
+  function endDrag(){dr=null;cv.style.cursor='grab';}
+  cv.addEventListener('mousedown',startDrag,{passive:false});cv.addEventListener('mousemove',moveDrag,{passive:false});cv.addEventListener('mouseup',endDrag);cv.addEventListener('mouseleave',()=>{endDrag();hideTT();});
+  cv.addEventListener('touchstart',startDrag,{passive:false});cv.addEventListener('touchmove',moveDrag,{passive:false});cv.addEventListener('touchend',endDrag);
+  cv.addEventListener('click',ev=>{const h=hit(gp(ev));if(h&&h.item.photo)window.open(h.item.photo,'_blank','noopener');});
+}
+const TTel=document.getElementById('tt');let ttTimer=null;
+function showTT(rect,ev){if(!rect){hideTT();return;}clearTimeout(ttTimer);ttTimer=setTimeout(()=>{const it=rect.item;TTel.style.display='';document.getElementById('tt-img').style.display='none';document.getElementById('tt-n').textContent=it.name;const whl=whLookup(it.name);document.getElementById('tt-d').innerHTML=`<b>${DL[it.dept]}</b> · ×${it.qty}<br>${it.l}×${it.w}×${it.h}cm · ${it.weight}kg · P${it.prio}${whl?'<br>🏭 '+((whl.loc?whl.loc.name:'?'))+' · '+whl.match.qty+' in stock':''}${it.notes?'<br>'+esc(it.notes):''}${it.photo?'<br><a href="'+esc(it.photo)+'" target="_blank" rel="noopener" style="color:var(--navy2);font-size:.63rem">🔗 Drive foto</a>':''}`;TTel.style.left=Math.min(ev.clientX+12,window.innerWidth-198)+'px';TTel.style.top=Math.min(ev.clientY+6,window.innerHeight-180)+'px';},80);}
+function hideTT(){clearTimeout(ttTimer);TTel.style.display='none';}
+
+// ═══════════════════════════════════════════════════════════
+// WAREHOUSE INVENTORY
+// ═══════════════════════════════════════════════════════════
+function addWHItem(){
+  const name=document.getElementById('wfn').value.trim();if(!name){document.getElementById('wfn').focus();return;}
+  const locId=document.getElementById('wfloc').value||whLocations[0]?.id||'zele';
+  const item={name,dept:document.getElementById('wfd').value,qty:+document.getElementById('wfq').value||0,min:+document.getElementById('wfmin').value||1,subLocation:document.getElementById('wfsloc').value.trim(),condition:document.getElementById('wfcond').value,notes:document.getElementById('wfnt').value.trim(),photo:null,updated:Date.now()};
+  addItemToStore(locId,item);clearWHForm();renderWHStock();renderWHStats();document.getElementById('wfn').focus();
+}
+function clearWHForm(){['wfn','wfsloc','wfnt'].forEach(id=>document.getElementById(id).value='');document.getElementById('wfq').value='1';document.getElementById('wfmin').value='1';document.getElementById('wfd').value='PT';document.getElementById('wfcond').value='Good';}
+function deleteWHItem(id){removeItemFromStore(id);renderWHStock();renderWHStats();}
+function setWHField(id,f,v){updateStoreItem(id,{[f]:v});renderWHStats();}
+function renderWHStats(){
+  const all=getAllWHItems();
+  const low=all.filter(i=>(i.qty||0)<(i.min||1)&&(i.qty||0)>0).length;
+  const out=all.filter(i=>(i.qty||0)===0).length;
+  const ok=all.filter(i=>(i.qty||0)>=(i.min||1)).length;
+  document.getElementById('whs-total').textContent=all.length;
+  document.getElementById('whs-low').textContent=low;
+  document.getElementById('whs-out').textContent=out;
+  document.getElementById('whs-ok').textContent=ok;
+}
+function renderWHStock(){
+  const el=document.getElementById('wh-list'),em=document.getElementById('wh-em');
+  const q=(document.getElementById('wh-srch').value||'').toLowerCase();
+  const fd=document.getElementById('wh-fd').value,fst=document.getElementById('wh-fst').value;
+  document.getElementById('wh-clear-btn').style.display=getAllWHItems().length?'':'none';
+  let fi=getAllWHItems().filter(i=>(!q||i.name.toLowerCase().includes(q))&&(!fd||i.dept===fd)&&(whLocFilter==='all'||i.locationId===whLocFilter));
+  if(fst==='ok')fi=fi.filter(i=>(i.qty||0)>=(i.min||1));
+  if(fst==='low')fi=fi.filter(i=>(i.qty||0)<(i.min||1)&&(i.qty||0)>0);
+  if(fst==='out')fi=fi.filter(i=>(i.qty||0)===0);
+  if(!fi.length){el.innerHTML='';em.style.display='';return;}em.style.display='none';
+  const locOpts=locOptions();
+  const dOpts=DEPTS.map(d=>`<option value="${d}">${DL[d]}</option>`).join('');
+  const condOpts=['Good','Fair','Needs repair','Retired'].map(c=>`<option value="${c}">${c}</option>`).join('');
+  el.innerHTML=fi.map(item=>{
+    const isOut=(item.qty||0)===0,isLow=(item.qty||0)<(item.min||1)&&!isOut,isOk=(item.qty||0)>=(item.min||1);
+    const pct=item.min?Math.min(100,Math.round((item.qty||0)/item.min*100)):100;
+    const bc=isOut?'var(--red)':isLow?'var(--warn)':'var(--grn)';
+    const statLabel=isOut?'<span class="wst-r">Out</span>':isLow?`<span class="wst-w">Low</span>`:`<span class="wst-ok">OK</span>`;
+    const loc=whLocations.find(l=>l.id===item.locationId);
+    const ls=locOpts.replace(`value="${esc(item.locationId||'')}"`,`value="${esc(item.locationId||'')}" selected`);
+    const ds=dOpts.replace(`value="${item.dept||'PT'}"`,`value="${item.dept||'PT'}" selected`);
+    const cs=condOpts.replace(`value="${item.condition||'Good'}"`,`value="${item.condition||'Good'}" selected`);
+    return`<div class="wi" id="wi-${item.id}" onclick="toggleWI(${item.id})">
+      <div class="wi-main">
+        <div class="wi-status-dot" style="background:${bc}" title="${isOut?'Out of stock':isLow?'Low stock':'OK'}"></div>
+        <span class="db d-${item.dept||'PT'}" style="flex-shrink:0">${DL[item.dept||'PT']}</span>
+        <span class="wi-name">${esc(item.name)}</span>
+        <span class="wi-qty-badge">${item.qty||0}<span style="font-size:.6rem;color:var(--tx3)">/min ${item.min||1}</span></span>
+        <span style="font-size:.68rem;color:var(--tx3);white-space:nowrap">📍 ${loc?esc(loc.name):'—'}</span>
+        <div class="wi-actions-inline" onclick="event.stopPropagation()">
+          <button class="btn sm grn" onclick="whAdj(${item.id},1)">+1</button>
+          <button class="btn sm red" onclick="whAdj(${item.id},-1)">−1</button>
+        </div>
+      </div>
+      <div class="wi-expand" onclick="event.stopPropagation()">
+        <div class="wi-bar"><div class="wi-bar-fill" style="width:${pct}%;background:${bc}"></div></div>
+        <div class="wi-meta-row">
+          <span>${statLabel}</span>
+          ${item.subLocation?`<span>📦 ${esc(item.subLocation)}</span>`:''}
+          ${item.notes?`<span>📝 ${esc(item.notes)}</span>`:''}
+          ${item.condition&&item.condition!=='Good'?`<span style="color:var(--warn)">⚠ ${esc(item.condition)}</span>`:''}
+        </div>
+        <div class="wi-edit-row">
+          <label style="font-size:.65rem;color:var(--tx3)">Qty:</label>
+          <input type="number" value="${item.qty||0}" min="0" onclick="event.stopPropagation()" onchange="setWHField(${item.id},'qty',+this.value);renderWHStock()" style="width:52px;border:1px solid var(--bd);border-radius:var(--r);padding:3px 6px;font-size:.8rem">
+          <label style="font-size:.65rem;color:var(--tx3)">Min:</label>
+          <input type="number" value="${item.min||1}" min="0" onclick="event.stopPropagation()" onchange="setWHField(${item.id},'min',+this.value);renderWHStock()" style="width:46px;border:1px solid var(--bd);border-radius:var(--r);padding:3px 6px;font-size:.8rem">
+          <select onclick="event.stopPropagation()" onchange="moveItemToLocation(${item.id},this.value)" style="font-size:.7rem;border:1px solid var(--bd);border-radius:var(--r);padding:3px 6px">${ls}</select>
+          <select onclick="event.stopPropagation()" onchange="setWHField(${item.id},'dept',this.value);renderWHStock()" style="font-size:.7rem;border:1px solid var(--bd);border-radius:var(--r);padding:3px 6px">${ds}</select>
+          <select onclick="event.stopPropagation()" onchange="setWHField(${item.id},'condition',this.value)" style="font-size:.7rem;border:1px solid var(--bd);border-radius:var(--r);padding:3px 6px">${cs}</select>
+          <input value="${esc(item.notes||'')}" onclick="event.stopPropagation()" onchange="setWHField(${item.id},'notes',this.value)" placeholder="Notes…" style="font-size:.7rem;border:1px solid var(--bd);border-radius:var(--r);padding:3px 6px;flex:1;min-width:80px">
+          <input value="${esc(item.name)}" onclick="event.stopPropagation()" onchange="setWHField(${item.id},'name',this.value)" style="font-size:.7rem;border:1px solid var(--bd);border-radius:var(--r);padding:3px 6px;flex:1;min-width:100px">
+          <input type="file" accept="image/*" id="wphi-${item.id}" style="display:none" onchange="handleWHPh(${item.id},this)">
+          <button class="btn sm" onclick="event.stopPropagation();trigWHPh(${item.id})">📷</button>
+          <button class="btn sm red" onclick="event.stopPropagation();deleteWHItem(${item.id})">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleWI(id){const el=document.getElementById('wi-'+id);if(el)el.classList.toggle('expanded');}
+
+// Move item between location stores
+function moveItemToLocation(itemId,newLocId){
+  const all=getAllWHItems();const item=all.find(i=>i.id===itemId);if(!item||item.locationId===newLocId)return;
+  const oldStore=getStore(item.locationId);const{locationId:_,...rest}=item;
+  oldStore.items=oldStore.items.filter(i=>i.id!==itemId);
+  getStore(newLocId).items.push(rest);saveWH();renderWHStock();
+}
+function whAdj(id,delta){
+  const all=getAllWHItems();const it=all.find(i=>i.id===id);if(!it)return;
+  const newQty=Math.max(0,(it.qty||0)+delta);
+  updateStoreItem(id,{qty:newQty});
+  whLog.unshift({itemId:id,item:it.name,dir:delta>0?'in':'out',qty:Math.abs(delta),time:new Date().toLocaleTimeString('en-GB'),date:new Date().toLocaleDateString('en-GB')});
+  if(whLog.length>500)whLog.pop();saveWH();renderWHStock();renderWHStats();
+}
+function trigWHPh(id){document.getElementById('wphi-'+id).click();}
+function handleWHPh(id,inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{updateStoreItem(id,{photo:ev.target.result});renderWHStock();};r.readAsDataURL(f);}
+
+function renderWHOverview(){
+  const el=document.getElementById('wh-ov-content');
+  const all=getAllWHItems();
+  if(!all.length){el.innerHTML='<div class="es">No stock items yet.</div>';return;}
+
+  // ── Per warehouse (primary warehouses first, then venues) ──
+  const primaryLocs=whLocations.filter(l=>l.id==='zele'||l.id==='westmalle');
+  const otherLocs=whLocations.filter(l=>l.id!=='zele'&&l.id!=='westmalle');
+
+  function locCard(loc){
+    const its=all.filter(i=>i.locationId===loc.id);if(!its.length)return'';
+    const out=its.filter(i=>(i.qty||0)===0).length,low=its.filter(i=>(i.qty||0)<(i.min||1)&&(i.qty||0)>0).length,ok=its.filter(i=>(i.qty||0)>=(i.min||1)).length;
+    const isClosed=loc.note&&loc.note.toLowerCase().includes('closed');
+    return`<div class="card" style="border-left:3px solid var(--wh-mid)">
+      <div style="font-weight:bold;color:var(--wh-dark);font-size:.9rem;margin-bottom:.35rem">
+        📍 ${esc(loc.name)} ${isClosed?'<span style="font-size:.65rem;color:var(--warn);font-weight:normal">('+esc(loc.note)+')</span>':''}
+      </div>
+      <div style="font-size:.75rem;color:var(--tx3);margin-bottom:.5rem">${its.length} items</div>
+      <div style="display:flex;gap:.85rem;flex-wrap:wrap;font-size:.75rem">
+        ${ok?`<span style="color:var(--grn)">✓ ${ok} OK</span>`:''}
+        ${low?`<span style="color:var(--warn)">⚠ ${low} low</span>`:''}
+        ${out?`<span style="color:var(--red)">✕ ${out} out</span>`:''}
+      </div>
+      <div style="height:5px;background:var(--bd);border-radius:3px;margin-top:.6rem;overflow:hidden">
+        <div style="height:100%;width:${its.length?Math.round(ok/its.length*100):0}%;background:var(--grn)"></div>
+      </div>
+      <div style="margin-top:.65rem;display:flex;flex-direction:column;gap:3px">
+        ${its.slice(0,5).map(i=>{const isOut=(i.qty||0)===0,isLow=(i.qty||0)<(i.min||1)&&!isOut;const col=isOut?'var(--red)':isLow?'var(--warn)':'var(--tx3)';return`<div style="display:flex;align-items:center;gap:6px;font-size:.72rem"><span class="db d-${i.dept||'PT'}" style="font-size:.57rem;padding:1px 5px">${DL[i.dept||'PT']}</span><span style="flex:1;color:var(--tx)">${esc(i.name)}</span><span style="color:${col};font-weight:bold">${i.qty||0}</span></div>`;}).join('')}
+        ${its.length>5?`<div style="font-size:.68rem;color:var(--tx3);margin-top:2px">+${its.length-5} more</div>`:''}
+      </div>
+    </div>`;
+  }
+
+  const primCards=primaryLocs.map(locCard).filter(Boolean);
+  const otherCards=otherLocs.map(locCard).filter(Boolean);
+
+  // ── Per dept ──
+  const deptCards=DEPTS.filter(d=>all.some(i=>i.dept===d)).map(d=>{
+    const its=all.filter(i=>i.dept===d);const out=its.filter(i=>(i.qty||0)===0).length,low=its.filter(i=>(i.qty||0)<(i.min||1)&&(i.qty||0)>0).length,ok=its.filter(i=>(i.qty||0)>=(i.min||1)).length;
+    return`<div class="card"><div style="font-weight:bold;color:${DC[d]};font-size:.85rem;margin-bottom:.35rem">${DL[d]}</div><div style="font-size:.73rem;color:var(--tx3)">${its.length} items</div>${ok?`<div style="font-size:.72rem;color:var(--grn);margin-top:.25rem">✓ ${ok} OK</div>`:''}${low?`<div style="font-size:.72rem;color:var(--warn)">⚠ ${low} low</div>`:''}${out?`<div style="font-size:.72rem;color:var(--red)">✕ ${out} out</div>`:''}</div>`;
+  }).join('');
+
+  el.innerHTML=`
+    <div style="margin-bottom:1rem">
+      <h4 style="font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--wh-dark);margin-bottom:.65rem;display:flex;align-items:center;gap:8px"><span>Main Warehouses</span><span style="flex:1;height:1px;background:var(--wh-mid);opacity:.3"></span></h4>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.7rem">${primCards.length?primCards.join(''):'<div class="es" style="padding:1rem">No items in Zele or Westmalle yet.</div>'}</div>
+    </div>
+    ${otherCards.length?`<div style="margin-bottom:1rem">
+      <h4 style="font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--tx3);margin-bottom:.65rem;display:flex;align-items:center;gap:8px"><span>Venues &amp; Other Locations</span><span style="flex:1;height:1px;background:var(--bd)"></span></h4>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.7rem">${otherCards.join('')}</div>
+    </div>`:''}
+    <div>
+      <h4 style="font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--tx3);margin-bottom:.65rem;display:flex;align-items:center;gap:8px"><span>By Department</span><span style="flex:1;height:1px;background:var(--bd)"></span></h4>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:.65rem">${deptCards}</div>
+    </div>`;
+}
+function renderWHLog(){
+  const el=document.getElementById('wh-log-content'),em=document.getElementById('wh-log-em');
+  if(!whLog.length){el.innerHTML='';em.style.display='';return;}em.style.display='none';
+  el.innerHTML=`<div class="tw"><table><thead><tr><th>Direction</th><th>Item</th><th>Qty</th><th>Date</th><th>Time</th></tr></thead><tbody>${whLog.slice(0,100).map(lg=>`<tr><td><span class="${lg.dir==='in'?'lin':'lout'}">${lg.dir.toUpperCase()}</span></td><td>${esc(lg.item)}</td><td>${lg.qty||1}</td><td style="color:var(--tx3)">${lg.date||''}</td><td style="color:var(--tx3)">${lg.time}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function importWHExcel(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{defval:''});if(!rows.length){alert('No data.');return;}
+    const cols=Object.keys(rows[0]);const fn2=(...t)=>cols.find(c=>t.some(x=>c.toLowerCase().includes(x)))||'';
+    const m={name:fn2('name','item','desc'),dept:fn2('dept','department'),qty:fn2('qty','quantity','stock'),min:fn2('min','minimum'),loc:fn2('loc','location','where'),cond:fn2('cond','condition','state'),notes:fn2('note','remark','serial')};
+    rows.forEach(row=>{const nm=String(row[m.name]||'').trim();if(!nm)return;
+      const dv=String(row[m.dept]||'').trim(),locName=String(row[m.loc]||'').trim();
+      const loc=whLocations.find(l=>l.name.toLowerCase()===locName.toLowerCase())||whLocations[0];
+      const locId=loc?loc.id:'zele';
+      addItemToStore(locId,{name:nm,dept:DEPTS.includes(dv)?dv:'PT',qty:+row[m.qty]||0,min:+row[m.min]||1,subLocation:'',condition:String(row[m.cond]||'Good').trim(),notes:String(row[m.notes]||'').trim(),photo:null,updated:Date.now()});
+    });
+    saveWH();renderWHStock();renderWHStats();alert('✓ Imported '+rows.length+' items.');}catch(ex){alert('Error: '+ex.message);}};
+  r.readAsArrayBuffer(f);ev.target.value='';
+}
+function exportWHExcel(){
+  const wb=XLSX.utils.book_new();const all=getAllWHItems();
+  const rows=all.map((i,x)=>{const loc=whLocations.find(l=>l.id===i.locationId);return{'#':x+1,'Name':i.name,'Department':DL[i.dept||'PT'],'Qty':i.qty,'Min':i.min,'Location':loc?loc.name:'','Sub-location':i.subLocation||'','Condition':i.condition,'Status':(i.qty||0)===0?'Out of stock':(i.qty||0)<(i.min||1)?'Low stock':'OK','Notes':i.notes,'Updated':new Date(i.updated||0).toLocaleDateString('en-GB')};});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'All Stock');
+  // Per-warehouse sheets for Zele and Westmalle specifically
+  ['zele','westmalle'].forEach(locId=>{const loc=whLocations.find(l=>l.id===locId);if(!loc)return;const its=all.filter(i=>i.locationId===locId);if(!its.length)return;XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(its.map(i=>({'Name':i.name,'Dept':DL[i.dept||'PT'],'Qty':i.qty,'Min':i.min,'Sub-loc':i.subLocation,'Cond':i.condition,'Status':(i.qty||0)===0?'Out of stock':(i.qty||0)<(i.min||1)?'Low stock':'OK','Notes':i.notes}))),loc.name);});
+  XLSX.writeFile(wb,'OBV-Warehouse-Stock.xlsx');
+}
+function saveWHBtn(){saveWH();const b=document.getElementById('wh-save-btn');const o=b.textContent;b.textContent='✓ Saved';b.style.background='rgba(36,107,54,.5)';setTimeout(()=>{b.textContent=o;b.style.background='';},1400);}
+
+// ═══════════════════════════════════════════════════════════
+// TRANSPORT QR & LABELS
+// ═══════════════════════════════════════════════════════════
+function qrURL(item){const base=window.location.href.split('?')[0];return base+'?scan='+encodeURIComponent(JSON.stringify({id:item.id,name:item.name,dept:item.dept,qty:item.qty,dims:`${item.l}x${item.w}x${item.h}`,weight:item.weight,truck:item.truck,prio:item.prio,notes:item.notes}));}
+function whQRURL(item){const base=window.location.href.split('?')[0];const loc=whLocations.find(l=>l.id===item.locationId);return base+'?scan='+encodeURIComponent(JSON.stringify({wh:true,id:item.id,name:item.name,dept:item.dept,qty:item.qty,location:loc?loc.name:'',locationId:item.locationId,notes:item.notes}));}
+function renderQR(){
+  const q=(document.getElementById('qrs').value||'').toLowerCase(),fi=items.filter(i=>!q||i.name.toLowerCase().includes(q));
+  const g=document.getElementById('qg'),em=document.getElementById('qe');
+  if(!fi.length){g.innerHTML='';em.style.display='';return;}em.style.display='none';
+  g.innerHTML=fi.map(item=>`<div class="qc"><h4>${esc(item.name)}</h4><p><span class="db d-${item.dept}">${DL[item.dept]}</span> ×${item.qty} P${item.prio}</p><div class="qcw" id="qw-${item.id}"></div><div style="font-size:.61rem;color:var(--tx3)">${item.truck||'Unassigned'} · ${item.l}×${item.w}×${item.h}cm · ${item.weight}kg</div></div>`).join('');
+  setTimeout(()=>{fi.forEach(item=>{const w=document.getElementById('qw-'+item.id);if(!w||w.children.length)return;try{new QRCode(w,{text:qrURL(item),width:100,height:100,correctLevel:QRCode.CorrectLevel.M});}catch(ex){}});},60);
+}
+function genAllQR(){renderQR();}
+function jumpToQR(id){showTab('qr');setTimeout(()=>{document.getElementById('qrs').value=items.find(i=>i.id===id)?.name||'';renderQR();},100);}
+function printAllLabels(){
+  if(!items.length){alert('No items.');return;}
+  const pn=curProd!==null?prods[curProd].name:'';const qi={};
+  items.forEach(item=>{const tmp=document.createElement('div');tmp.style.cssText='position:fixed;left:-9999px;visibility:hidden';document.body.appendChild(tmp);try{new QRCode(tmp,{text:qrURL(item),width:120,height:120,correctLevel:QRCode.CorrectLevel.M});const cv=tmp.querySelector('canvas');if(cv)qi[item.id]=cv.toDataURL();}catch(ex){}document.body.removeChild(tmp);});
+  const labels=items.map(item=>`<div class="label">${qi[item.id]?`<img src="${qi[item.id]}" style="width:26mm;height:26mm;display:block">`:'<div style="width:26mm;height:26mm;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:6pt">No QR</div>'}<div class="ln">${esc(item.name)}</div><div class="lm">${item.l||item.w?item.l+'×'+item.w+'×'+item.h+' cm · ':''} ${item.weight?item.weight+' kg · ':''}×${item.qty}<br>${item.truck||'Unassigned'}${item.notes?'<br><i>'+esc(item.notes)+'</i>':''}</div><span class="lcat" style="background:${DCL[item.dept]};color:${DC[item.dept]}">${DL[item.dept]}</span></div>`).join('');
+  const pa=document.getElementById('print-area');
+  pa.innerHTML=`<div style="padding:5mm;font-family:Arial,sans-serif"><div class="label-hdr"><strong>OBV Transport</strong> — ${esc(pn)} — ${items.length} items — ${new Date().toLocaleDateString('en-GB')}</div><div class="label-sheet">${labels}</div></div>`;
+  pa.style.display='block';setTimeout(()=>{window.print();setTimeout(()=>{pa.style.display='none';pa.innerHTML='';},800);},150);
+}
+function renderWHQR(){
+  const q=(document.getElementById('wh-qrs').value||'').toLowerCase(),fi=whItems.filter(i=>!q||i.name.toLowerCase().includes(q));
+  const g=document.getElementById('wh-qg'),em=document.getElementById('wh-qe');
+  if(!fi.length){g.innerHTML='';em.style.display='';return;}em.style.display='none';
+  const locMap=Object.fromEntries(whLocations.map(l=>[l.id,l.name]));
+  g.innerHTML=fi.map(item=>`<div class="qc"><h4>${esc(item.name)}</h4><p><span class="db d-${item.dept||'PT'}">${DL[item.dept||'PT']}</span> · qty ${item.qty}</p><div class="qcw" id="wqw-${item.id}"></div><div style="font-size:.61rem;color:var(--tx3)">${locMap[item.locationId]||'—'}</div></div>`).join('');
+  setTimeout(()=>{fi.forEach(item=>{const w=document.getElementById('wqw-'+item.id);if(!w||w.children.length)return;try{new QRCode(w,{text:whQRURL(item),width:100,height:100,correctLevel:QRCode.CorrectLevel.M});}catch(ex){}});},60);
+}
+function genAllWHQR(){renderWHQR();}
+function printWHLabels(){
+  if(!whItems.length){alert('No items.');return;}
+  const qi={};
+  whItems.forEach(item=>{const tmp=document.createElement('div');tmp.style.cssText='position:fixed;left:-9999px;visibility:hidden';document.body.appendChild(tmp);try{new QRCode(tmp,{text:whQRURL(item),width:120,height:120,correctLevel:QRCode.CorrectLevel.M});const cv=tmp.querySelector('canvas');if(cv)qi[item.id]=cv.toDataURL();}catch(ex){}document.body.removeChild(tmp);});
+  const locMap=Object.fromEntries(whLocations.map(l=>[l.id,l.name]));
+  const labels=whItems.map(item=>`<div class="label">${qi[item.id]?`<img src="${qi[item.id]}" style="width:26mm;height:26mm;display:block">`:'<div style="width:26mm;height:26mm;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:6pt">No QR</div>'}<div class="ln">${esc(item.name)}</div><div class="lm">Qty: ${item.qty} · Min: ${item.min||1}<br>${locMap[item.locationId]||'—'}<br>${item.condition||''}</div><span class="lcat" style="background:${DCL[item.dept||'PT']};color:${DC[item.dept||'PT']}">${DL[item.dept||'PT']}</span></div>`).join('');
+  const pa=document.getElementById('print-area');
+  pa.innerHTML=`<div style="padding:5mm;font-family:Arial,sans-serif"><div class="label-hdr"><strong>OBV Warehouse</strong> — Stock Labels — ${whItems.length} items — ${new Date().toLocaleDateString('en-GB')}</div><div class="label-sheet">${labels}</div></div>`;
+  pa.style.display='block';setTimeout(()=>{window.print();setTimeout(()=>{pa.style.display='none';pa.innerHTML='';},800);},150);
+}
+
+// ═══════════════════════════════════════════════════════════
+// SCANNER
+// ═══════════════════════════════════════════════════════════
+function openScanner(){
+  const screens=['str','sp','ss'];let from='str';
+  screens.forEach(id=>{if(document.getElementById(id).classList.contains('active'))from=id;});
+  document.getElementById('ss').dataset.from=from;
+  screens.forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('ss').classList.add('active');
+  document.getElementById('sr').style.display='none';document.getElementById('sst').textContent='Point camera at a QR code…';
+  scanCurItem=null;startCam();renderScanLog();
+}
+function closeScanner(){stopCam();document.getElementById('ss').classList.remove('active');document.getElementById(document.getElementById('ss').dataset.from||'str').classList.add('active');}
+function startCam(){navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}).then(s=>{scanStream=s;const v=document.getElementById('sv');v.srcObject=s;v.play();scanAF=requestAnimationFrame(tickScan);}).catch(err=>document.getElementById('sst').textContent='Camera error: '+err.message);}
+function stopCam(){if(scanStream)scanStream.getTracks().forEach(t=>t.stop());cancelAnimationFrame(scanAF);scanStream=null;}
+function tickScan(){
+  const v=document.getElementById('sv');
+  if(v.readyState===v.HAVE_ENOUGH_DATA){const dc=document.getElementById('qdc');dc.width=v.videoWidth;dc.height=v.videoHeight;const ctx=dc.getContext('2d');ctx.drawImage(v,0,0);const img=ctx.getImageData(0,0,dc.width,dc.height);const code=jsQR(img.data,img.width,img.height);if(code){try{const url=new URL(code.data);const sp=url.searchParams.get('scan');if(sp){const data=JSON.parse(decodeURIComponent(sp));handleScanResult(data);}}catch(ex){document.getElementById('sst').textContent='Unknown QR';}}}
+  scanAF=requestAnimationFrame(tickScan);
+}
+function handleScanResult(data){
+  cancelAnimationFrame(scanAF);scanCurItem=data;
+  document.getElementById('sst').textContent='✓ QR detected!';document.getElementById('sr').style.display='';document.getElementById('si-n').textContent=data.name;
+  if(data.wh){
+    const it=whItems.find(i=>i.id===data.id||i.name.toLowerCase()===data.name.toLowerCase());
+    document.getElementById('si-d').innerHTML=`Dept: ${DL[data.dept]||data.dept} · Qty: ${data.qty}<br>Location: ${data.location||'—'}${data.notes?'<br>'+esc(data.notes):''}`;
+    const saEl=document.getElementById('sa');
+    saEl.innerHTML=`<button class="sab sin" onclick="doWHScan(1)">+1 Add to stock</button><button class="sab sout" onclick="doWHScan(-1)">−1 Remove</button>`;
+    if(!it)saEl.innerHTML+=`<button class="sab sadd" onclick="addWHFromScan()">+ Add to Warehouse</button>`;
+  } else {
+    const existById=items.find(i=>i.id===data.id),existByName=!existById&&items.find(i=>i.name.toLowerCase()===data.name.toLowerCase());const existing=existById||existByName;
+    document.getElementById('si-d').innerHTML=`Dept: ${DL[data.dept]||data.dept} · Qty: ${data.qty}<br>Truck: ${data.truck||'—'} · P${data.prio}<br>${data.dims} cm · ${data.weight}kg${data.notes?'<br>'+esc(data.notes):''}`;
+    const saEl=document.getElementById('sa');
+    if(existing){saEl.innerHTML=`<button class="sab sin" onclick="doScan('in')">✓ Check IN</button><button class="sab sout" onclick="doScan('out')">✗ Check OUT</button><button class="sab smore" onclick="offerDupOpts(${existing.id})">… More</button>`;}
+    else{saEl.innerHTML=`<button class="sab sin" onclick="doScan('in')">✓ Check IN</button><button class="sab sout" onclick="doScan('out')">✗ Check OUT</button><button class="sab sadd" onclick="offerAdd()">+ Add to List</button>`;}
+  }
+  scanAF=requestAnimationFrame(tickScan);
+}
+function doScan(dir){if(!scanCurItem)return;addScanLog({itemId:scanCurItem.id,item:scanCurItem.name,dir,time:new Date().toLocaleTimeString('en-GB')});renderScanLog();document.getElementById('sst').textContent=dir==='in'?'✓ Checked IN':'✗ Checked OUT';document.getElementById('sr').style.display='none';scanCurItem=null;}
+function doWHScan(delta){if(!scanCurItem)return;const all=getAllWHItems();const it=all.find(i=>i.id===scanCurItem.id||i.name.toLowerCase()===scanCurItem.name.toLowerCase());if(it)whAdj(it.id,delta);document.getElementById('sst').textContent=delta>0?'✓ Added to stock':'✗ Removed from stock';document.getElementById('sr').style.display='none';scanCurItem=null;}
+function addWHFromScan(){if(!scanCurItem)return;const d=scanCurItem;const loc=whLocations.find(l=>l.name.toLowerCase()===d.location?.toLowerCase())||whLocations.find(l=>l.id==='zele')||whLocations[0];const locId=loc?loc.id:'zele';addItemToStore(locId,{name:d.name,dept:DEPTS.includes(d.dept)?d.dept:'PT',qty:d.qty||1,min:1,subLocation:'',condition:'Good',notes:d.notes||'',photo:null,updated:Date.now()});saveWH();renderWHStats();document.getElementById('sst').textContent='✓ Added to Warehouse ('+(loc?.name||'?')+')';document.getElementById('sr').style.display='none';scanCurItem=null;}
+function offerDupOpts(existingId){if(!scanCurItem)return;const d=scanCurItem;const ex=items.find(i=>i.id===existingId);document.getElementById('sta-title').textContent='Already on list';document.getElementById('sta-body').innerHTML=`<strong>${esc(d.name)}</strong> is already on the list (Qty: ${ex?ex.qty:d.qty}). What would you like to do?`;document.getElementById('sta-actions').innerHTML=`<button class="btn" onclick="closeSTA()">Cancel</button><button class="btn" onclick="incQty(${existingId});closeSTA()">+1 Quantity</button><button class="btn pri" onclick="addScannedNew()">Add as new item</button>`;document.getElementById('sta-modal').classList.add('open');}
+function incQty(id){const it=items.find(i=>i.id===id);if(!it)return;it.qty++;renderTable();updStats();saveAll();document.getElementById('sst').textContent='✓ Qty → '+it.qty;document.getElementById('sr').style.display='none';scanCurItem=null;}
+function offerAdd(){if(!scanCurItem)return;const d=scanCurItem;document.getElementById('sta-title').textContent='Add to list?';document.getElementById('sta-body').innerHTML=`<strong>${esc(d.name)}</strong><br>Dept: ${DL[d.dept]||d.dept} · Qty: ${d.qty} · ${d.dims} cm · ${d.weight}kg`;document.getElementById('sta-actions').innerHTML=`<button class="btn" onclick="closeSTA()">Cancel</button><button class="btn pri" onclick="addScannedNew()">Add to List</button>`;document.getElementById('sta-modal').classList.add('open');}
+function parseDims(s){const p=(s||'').split(/[x×,]/i).map(Number);return{l:p[0]||0,w:p[1]||0,h:p[2]||0};}
+function addScannedNew(){if(!scanCurItem)return;const d=scanCurItem;const{l,w,h}=parseDims(d.dims);items.push({id:nextId++,name:d.name,qty:d.qty||1,l,w,h,weight:d.weight||0,dept:DEPTS.includes(d.dept)?d.dept:'PT',prio:d.prio||2,truck:d.truck||'',notes:d.notes||'',photo:null});saveAll();closeSTA();renderTable();updStats();document.getElementById('sst').textContent='✓ Added: '+d.name;document.getElementById('sr').style.display='none';scanCurItem=null;}
+function closeSTA(){document.getElementById('sta-modal').classList.remove('open');}
+function addScanLog(entry){scanLog.unshift(entry);if(scanLog.length>200)scanLog.pop();if(curProd!==null){prods[curProd].scanLog=scanLog;saveAll();}}
+function renderScanLog(){const el=document.getElementById('slg'),sec=document.getElementById('slg-sec');if(!scanLog.length){sec.style.display='none';return;}sec.style.display='';el.innerHTML=scanLog.slice(0,15).map(lg=>`<div class="sle"><span class="${lg.dir==='in'?'lin':'lout'}">${lg.dir.toUpperCase()}</span><span style="flex:1">${esc(lg.item)}</span><span style="color:#555">${lg.time}</span></div>`).join('');}
+
+// ═══════════════════════════════════════════════════════════
+// EXPORT — TRANSPORT
+// ═══════════════════════════════════════════════════════════
+function buildText(){const p=prods[curProd]||{};const date=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});let out=`OBV TRANSPORT — LOADING PLAN\n${'═'.repeat(52)}\nProduction : ${p.name||''}\n`;if(p.dest)out+=`Destination: ${p.dest}\n`;if(p.date)out+=`Date       : ${new Date(p.date).toLocaleDateString('en-GB')}\n`;out+=`Generated  : ${date}\n${'═'.repeat(52)}\n\n`;const asgn=items.filter(i=>i.truck),un=items.filter(i=>!i.truck);Object.entries(gb(asgn,'truck')).forEach(([tn,ti])=>{const tk=trucks.find(t=>t.name===tn)||{};const tw=ti.reduce((s,i)=>s+(i.weight||0)*(i.qty||1),0);out+=`TRUCK: ${tn.toUpperCase()}\n`;if(tk.length)out+=`${tk.length}×${tk.width}×${tk.height} cm  |  Max: ${(tk.maxWeight||0).toLocaleString()} kg  |  Loaded: ${tw.toLocaleString()} kg\n`;out+='─'.repeat(52)+'\n';DEPTS.forEach(d=>{const di=ti.filter(i=>i.dept===d).sort((a,b)=>a.prio-b.prio);if(!di.length)return;out+=`\n  [${DL[d]}]\n`;di.forEach(i=>{const whl=whLookup(i.name);out+=`    P${i.prio}  ${i.name} ×${i.qty}  [${i.l}×${i.w}×${i.h}cm]  ${i.weight*(i.qty||1)}kg`;if(whl){const loc=whl.loc;out+=`  → ${loc?loc.name:'Warehouse'} (stock: ${whl.match.qty})`;}if(i.notes)out+=`\n       ↳ ${i.notes}`;out+='\n';});});out+='\n';});if(un.length){out+=`UNASSIGNED (${un.length})\n${'─'.repeat(52)}\n`;un.forEach(i=>out+=`  ${i.name} ×${i.qty} [${DL[i.dept]}]\n`);}out+=`\n${'═'.repeat(52)}\nOpera Ballet Vlaanderen · OBV Logistics\n`;return out;}
+function genExpPrev(){document.getElementById('ep').textContent=buildText();}
+function exportText(){const t=buildText();document.getElementById('ep').textContent=t;const p=prods[curProd]?.name||'plan';dl(new Blob([t],{type:'text/plain'}),`OBV-loading-${sn(p)}.txt`);}
+function copyText(){const t=buildText();navigator.clipboard.writeText(t).then(()=>alert('Copied!')).catch(()=>{const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);alert('Copied!');});}
+function exportExcel(){const wb=XLSX.utils.book_new();const p=prods[curProd]?.name||'Plan';const rows=items.map((i,x)=>{const whl=whLookup(i.name);const loc=whl?whLocations.find(l=>l.id===whl.match.locationId):null;return{'#':x+1,'Name':i.name,'Qty':i.qty,'L':i.l,'W':i.w,'H':i.h,'Weight(kg)':i.weight,'TotWt':i.weight*(i.qty||1),'Vol(m³)':+((i.l/100)*(i.w/100)*(i.h/100)*(i.qty||1)).toFixed(3),'Dept':DL[i.dept],'P':i.prio,'Truck':i.truck,'WH Stock':whl?whl.match.qty:'—','WH Location':loc?loc.name:'—','Notes':i.notes};});XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Items');Object.entries(gb(items.filter(i=>i.truck),'truck')).forEach(([n,ti])=>{const r=ti.sort((a,b)=>a.prio-b.prio).map((i,x)=>({'#':x+1,'Item':i.name,'Qty':i.qty,'Dept':DL[i.dept],'Dims':`${i.l}×${i.w}×${i.h}`,'Wt':i.weight,'TotWt':i.weight*(i.qty||1),'P':i.prio,'Notes':i.notes}));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(r),n.slice(0,31));});XLSX.writeFile(wb,`OBV-Transport-${sn(p)}.xlsx`);}
+function saveProject(){syncCur();cloudSave();showSaveIndicator('✓ Opgeslagen');}
+function exportProject(){syncCur();const p=prods[curProd];dl(new Blob([JSON.stringify(p,null,2)],{type:'application/json'}),`OBV-${sn(p.name||'prod')}.json`);}
+function exportProdById(i){const p=prods[i];dl(new Blob([JSON.stringify(p,null,2)],{type:'application/json'}),`OBV-${sn(p.name||'prod')}.json`);}
+function importProject(ev){const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.name)throw new Error('Invalid file');d.id=Date.now();prods.push(d);saveAll();renderProductions();alert('✓ Imported: '+d.name);}catch(ex){alert('Error: '+ex.message);}};r.readAsText(f);ev.target.value='';}
+function importExcel(ev){const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{defval:''});if(!rows.length){alert('No data.');return;}const cols=Object.keys(rows[0]);const fn2=(...t)=>cols.find(c=>t.some(x=>c.toLowerCase().includes(x)))||'';const m={name:fn2('name','item','desc'),qty:fn2('qty','quantity'),l:fn2('length','long'),w:fn2('width','wide'),h:fn2('height','high'),weight:fn2('weight','kg'),dept:fn2('dept','department'),prio:fn2('priority','prio'),truck:fn2('truck','vehicle'),notes:fn2('note','remark')};rows.forEach(row=>{const nm=String(row[m.name]||'').trim();if(!nm)return;const dv=String(row[m.dept]||'').trim();items.push({id:nextId++,name:nm,qty:+row[m.qty]||1,l:+row[m.l]||0,w:+row[m.w]||0,h:+row[m.h]||0,weight:+row[m.weight]||0,dept:DEPTS.includes(dv)?dv:'PT',prio:+row[m.prio]||2,truck:String(row[m.truck]||'').trim(),notes:String(row[m.notes]||'').trim(),photo:null});});renderTable();updStats();renderTrucks();saveAll();alert('✓ Imported '+rows.length+' rows.');}catch(ex){alert('Error: '+ex.message);}};r.readAsArrayBuffer(f);ev.target.value='';}
+
+// ═══════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════
+// FIREBASE CLOUD STORAGE
+// ═══════════════════════════════════════════════════════════
+let _saveTimeout = null;
+let _listening = false;
+
+async function cloudSave() {
+  if(curProd!==null)syncCur();
+  const data = { prods, savedAt: new Date().toISOString() };
+  clearTimeout(_saveTimeout);
+  _saveTimeout = setTimeout(async () => {
+    let saved = false;
+    if (window.firebaseReady) {
+      saved = await window.firebaseSave(data);
+      if (saved) showSaveIndicator('✓ Opgeslagen in cloud');
+    }
+    if (!saved) {
+      try { localStorage.setItem('obv_tr_v1', JSON.stringify(prods)); showSaveIndicator('✓ Lokaal opgeslagen'); } catch(e) {}
+    }
+  }, 800);
+}
+
+async function cloudLoad() {
+  if (window.firebaseReady) {
+    const data = await window.firebaseLoad();
+    if (data && data.prods && data.prods.length) { prods = data.prods; return true; }
+  }
+  try {
+    const d = localStorage.getItem('obv_tr_v1') || localStorage.getItem('obv5_tr');
+    if (d) { prods = JSON.parse(d); return true; }
+  } catch(e) {}
+  return false;
+}
+
+function startListening() {
+  if (_listening || !window.firebaseReady) return;
+  _listening = true;
+  window.firebaseListen(function(data) {
+    if (!data || !data.prods) return;
+    prods = data.prods;
+    if (curProd !== null && prods[curProd]) {
+      const p = prods[curProd];
+      trucks = JSON.parse(JSON.stringify(p.trucks || []));
+      items = JSON.parse(JSON.stringify(p.items || []));
+      nextId = p.nextId || 1;
+      renderTable(); updStats(); renderTrucks(); updTruckFilter();
+      if (document.getElementById('panel-fleet') && document.getElementById('panel-fleet').classList.contains('active')) renderFleet();
+    }
+    renderProductions();
+    showSaveIndicator('\u2193 Bijgewerkt door collega', '#c49a28');
+  });
+}
+
+function showSaveIndicator(msg, color) {
+  const el = document.getElementById('save-indicator');
+  if (!el) return;
+  el.textContent = msg || '\u2713 Opgeslagen';
+  el.style.color = color || 'var(--gold)';
+  el.style.opacity = '1';
+  setTimeout(function() { el.style.opacity = '0'; }, 2500);
+}
+
+async function initApp() {
+  if (!window.firebaseReady) {
+    await new Promise(function(resolve) {
+      const timeout = setTimeout(resolve, 3000);
+      document.addEventListener('firebase-ready', function() { clearTimeout(timeout); resolve(); }, { once: true });
+    });
+  }
+  await cloudLoad();
+  if (!prods.length) {
+    prods.push({id:1,name:'Parcival \u2192 Vienna',dest:'Vienna',date:'2026-09-15',notes:'Season opener',
+      trucks:[{id:'t1',name:'Truck 1',length:1360,width:247,height:270,maxWeight:24000,notes:''},{id:'t2',name:'Truck 2',length:1360,width:247,height:270,maxWeight:24000,notes:''}],
+      items:[
+        {id:1,name:'Backdrop Frame \u2014 Main',qty:2,l:400,w:60,h:20,weight:85,dept:'PT',prio:1,truck:'Truck 1',notes:'Steel frame, keep horizontal',photo:null},
+        {id:2,name:'Lighting Rig Package A',qty:1,l:120,w:80,h:50,weight:240,dept:'AVLX',prio:1,truck:'Truck 1',notes:'Fragile \u2014 do not stack',photo:null},
+        {id:3,name:'Costume Trunks',qty:6,l:90,w:55,h:70,weight:65,dept:'Costume',prio:2,truck:'Truck 2',notes:'',photo:null},
+        {id:4,name:'Orchestra Pit Risers',qty:4,l:200,w:100,h:20,weight:180,dept:'PT',prio:3,truck:'Truck 2',notes:'',photo:null},
+        {id:5,name:'Props Flight Cases',qty:8,l:80,w:60,h:60,weight:45,dept:'FOH',prio:2,truck:'Truck 2',notes:'',photo:null},
+        {id:6,name:'Makeup & Wig Stations',qty:3,l:100,w:60,h:80,weight:55,dept:'KG',prio:2,truck:'Truck 1',notes:'Keep upright',photo:null}
+      ],nextId:7,scanLog:[],createdAt:Date.now(),updatedAt:Date.now()});
+  }
+  renderProductions();
+  startListening();
+  checkQRParam();
+}
+
+function checkPw() {
+  const input = document.getElementById('pw-input');
+  const err = document.getElementById('pw-error');
+  if (input.value.toLowerCase().trim() === 'transportzot') {
+    document.getElementById('pw-screen').style.display = 'none';
+    try { sessionStorage.setItem('obv-tr-auth', '1'); } catch(e) {}
+    initApp();
+  } else {
+    input.style.borderColor = '#a82828';
+    err.textContent = 'Ongeldig wachtwoord. Probeer opnieuw.';
+    input.value = '';
+    setTimeout(function() { input.style.borderColor = 'rgba(255,255,255,.15)'; err.textContent = ''; }, 2000);
+  }
+}
+
+(function() {
+  try {
+    if (sessionStorage.getItem('obv-tr-auth') === '1') {
+      document.getElementById('pw-screen').style.display = 'none';
+      initApp();
+    }
+  } catch(e) {}
+})();
+
+function gb(arr,k){return arr.reduce((a,i)=>{(a[i[k]]=a[i[k]]||[]).push(i);return a;},{});}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function sn(s){return s.replace(/[^a-zA-Z0-9-_]/g,'_');}
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();}
+
+// QR param on load
+function checkQRParam(){try{const u=new URL(window.location.href);const sp=u.searchParams.get('scan');if(sp){const data=JSON.parse(decodeURIComponent(sp));openScanner();setTimeout(()=>handleScanResult(data),600);}}catch(ex){}}
+
+// Auto-save
+setInterval(()=>{if(curProd!==null)saveProject();saveWH();},30000);
+
+// Resize
+let rzt;window.addEventListener('resize',()=>{clearTimeout(rzt);rzt=setTimeout(()=>{if(document.getElementById('panel-visual')?.classList.contains('active'))renderVisual();},260);});
+
+// Keyboard shortcuts
+document.addEventListener('keydown',ev=>{if(['INPUT','SELECT','TEXTAREA'].includes(ev.target.tagName))return;if(document.getElementById('sp').classList.contains('active')){const m={'1':'items','2':'fleet','3':'qr'};if(m[ev.key])showTab(m[ev.key]);}});
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+// Startup handled by initApp() after password
+// Seed if fresh
+if(!prods.length){prods.push({id:1,name:'Parcival → Vienna',dest:'Vienna',date:'2026-09-15',notes:'Season opener',trucks:[{id:'t1',name:'Truck 1',length:1360,width:247,height:270,maxWeight:24000,notes:''},{id:'t2',name:'Truck 2',length:1360,width:247,height:270,maxWeight:24000,notes:''}],items:[{id:1,name:'Backdrop Frame — Main',qty:2,l:400,w:60,h:20,weight:85,dept:'PT',prio:1,truck:'Truck 1',notes:'Steel frame, keep horizontal',photo:null},{id:2,name:'Lighting Rig Package A',qty:1,l:120,w:80,h:50,weight:240,dept:'AVLX',prio:1,truck:'Truck 1',notes:'Fragile — do not stack',photo:null},{id:3,name:'Costume Trunks',qty:6,l:90,w:55,h:70,weight:65,dept:'Costume',prio:2,truck:'Truck 2',notes:'',photo:null},{id:4,name:'Orchestra Pit Risers',qty:4,l:200,w:100,h:20,weight:180,dept:'PT',prio:3,truck:'Truck 2',notes:'',photo:null},{id:5,name:'Props Flight Cases',qty:8,l:80,w:60,h:60,weight:45,dept:'FOH',prio:2,truck:'Truck 2',notes:'',photo:null},{id:6,name:'Makeup & Wig Stations',qty:3,l:100,w:60,h:80,weight:55,dept:'KG',prio:2,truck:'Truck 1',notes:'Keep upright',photo:null}],nextId:7,scanLog:[],createdAt:Date.now(),updatedAt:Date.now()});saveAll();}
+if(!getAllWHItems().length){
+  whStores={
+    zele:{items:[
+      {id:1,name:'Backdrop Frame — Main',dept:'PT',qty:4,min:2,subLocation:'Bay 1',condition:'Good',notes:'Steel frame, keep horizontal',photo:null,updated:Date.now()},
+      {id:4,name:'Truss segment 2m',dept:'PT',qty:24,min:12,subLocation:'Bay 2',condition:'Good',notes:'',photo:null,updated:Date.now()},
+      {id:6,name:'Makeup & Wig Stations',dept:'KG',qty:5,min:3,subLocation:'Room B',condition:'Good',notes:'',photo:null,updated:Date.now()},
+    ]},
+    westmalle:{items:[
+      {id:2,name:'Lighting Rig Package A',dept:'AVLX',qty:2,min:1,subLocation:'Bay 3',condition:'Good',notes:'Check cables before use',photo:null,updated:Date.now()},
+      {id:5,name:'Follow spot (Strong)',dept:'AVLX',qty:2,min:2,subLocation:'Bay 4',condition:'Needs repair',notes:'Unit 2 needs alignment',photo:null,updated:Date.now()},
+    ]},
+    antwerp:{items:[
+      {id:3,name:'Costume Trunks',dept:'Costume',qty:12,min:6,subLocation:'Wardrobe',condition:'Good',notes:'',photo:null,updated:Date.now()},
+    ]},
+  };
+}
+// Startup handled by checkPw() / initApp() — see Firebase section above
+</script>
+</body>
+</html>
